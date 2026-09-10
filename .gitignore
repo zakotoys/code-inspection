@@ -35,3 +35,8 @@ artifacts/
 *.vsix
 extensions/vscode/server/
 extensions/vscode/LICENSE.txt
+
+# Local extension test profiles and working notes
+.vscode-test/
+.test-output/
+docs/

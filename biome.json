@@ -1,0 +1,22 @@
+{
+  "files": {
+    "includes": [
+      "src/**",
+      "tests/**/*.ts",
+      "scripts/**",
+      "*.json",
+      "!package-lock.json",
+      ".vscode/**"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  }
+}

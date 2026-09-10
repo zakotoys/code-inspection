@@ -1,0 +1,45 @@
+{
+  "name": "code-inspection",
+  "displayName": "Code Inspection",
+  "description": "VS Code diagnostics detector for the ZakoToys project (development preview).",
+  "version": "0.0.1",
+  "publisher": "zakotoys",
+  "private": true,
+  "engines": {
+    "vscode": "^1.137.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeInspection.showStatus",
+        "title": "查看检测器状态",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.showDiagnostics",
+        "title": "查看当前诊断",
+        "category": "Code Inspection"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "npm run compile && node --test dist/tests/store.test.js && node scripts/test-extension.cjs",
+    "check": "npm run typecheck && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "1.137.0",
+    "@vscode/test-electron": "3.1.0",
+    "typescript": "7.0.2"
+  }
+}
