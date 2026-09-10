@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "inspectors": {
+    "eslint": {
+      "enabled": false,
+      "cwd": ".",
+      "patterns": ["**/*.js"]
+    },
+    "typescript": {
+      "enabled": false,
+      "cwd": ".",
+      "project": "tsconfig.json"
+    },
+    "build": {
+      "enabled": true,
+      "cwd": ".",
+      "command": ["node", "-e", "console.error('fixture build failed'); process.exit(4)"],
+      "timeoutMs": 10000
+    }
+  }
+}

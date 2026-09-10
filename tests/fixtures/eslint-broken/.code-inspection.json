@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "inspectors": {
+    "eslint": {
+      "enabled": true,
+      "cwd": ".",
+      "patterns": ["**/*.js"]
+    },
+    "typescript": {
+      "enabled": false,
+      "cwd": ".",
+      "project": "tsconfig.json"
+    },
+    "build": {
+      "enabled": false,
+      "cwd": ".",
+      "command": ["npm", "run", "build"],
+      "timeoutMs": 120000
+    }
+  }
+}

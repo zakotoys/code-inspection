@@ -1,0 +1,16 @@
+id = "code-inspection"
+name = "Code Inspection"
+description = "Save-triggered ESLint, TypeScript, and build diagnostics for JavaScript and TypeScript workspaces."
+version = "0.1.0"
+schema_version = 1
+authors = ["ZakoToys"]
+repository = "https://github.com/ZakoToys/code-inspection"
+
+[language_servers.code-inspection]
+name = "Code Inspection"
+languages = ["JavaScript", "TypeScript", "TSX"]
+
+[language_servers.code-inspection.language_ids]
+JavaScript = "javascript"
+TypeScript = "typescript"
+TSX = "typescriptreact"

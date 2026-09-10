@@ -1,0 +1,37 @@
+{
+  "name": "@zakotoys/code-inspection-runtime",
+  "version": "0.1.0",
+  "description": "CLI, local workspace service, MCP server, and LSP adapter for code inspection.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "code-inspection": "dist/cli.js",
+    "code-inspection-mcp": "dist/mcp.js",
+    "code-inspection-lsp": "dist/lsp.js"
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=18.20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
+    "test": "vitest run",
+    "bundle": "node scripts/bundle.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@zakotoys/code-inspection-core": "0.1.0",
+    "vscode-jsonrpc": "^9.0.2",
+    "vscode-languageserver": "^10.1.1",
+    "vscode-languageserver-textdocument": "^1.0.14",
+    "zod": "^4.5.4"
+  }
+}

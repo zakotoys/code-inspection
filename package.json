@@ -1,0 +1,36 @@
+{
+  "name": "@zakotoys/code-inspection",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local code inspection, build diagnostics, MCP, and editor integrations.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "extensions/vscode"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "check": "npm run build && npm test",
+    "smoke:lsp": "npm run build && node scripts/smoke-lsp.mjs",
+    "smoke:mcp": "npm run build && node scripts/smoke-mcp.mjs",
+    "smoke:package": "node scripts/smoke-package.mjs",
+    "package": "npm run build && npm run package:core && npm run package:runtime && npm run package:vscode && npm run package:zed",
+    "package:core": "node scripts/prepare-artifacts.mjs && npm pack --workspace @zakotoys/code-inspection-core --pack-destination artifacts",
+    "package:runtime": "node scripts/prepare-artifacts.mjs && npm pack --workspace @zakotoys/code-inspection-runtime --pack-destination artifacts",
+    "package:vscode": "node scripts/package-vscode.mjs",
+    "package:zed": "node scripts/package-zed.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^2.5.0",
+    "@types/node": "^24.3.0",
+    "@types/vscode": "^1.103.0",
+    "@vscode/vsce": "^3.9.2",
+    "eslint": "^10.10.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.0"
+  }
+}
