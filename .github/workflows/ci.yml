@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  node:
+    name: Node (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  vscode-package:
+    name: VS Code package
+    runs-on: ubuntu-latest
+    needs: node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run package:vscode
+      - uses: actions/upload-artifact@v4
+        with:
+          name: code-inspection-vscode
+          path: artifacts/*.vsix
+
+  zed-package:
+    name: Zed package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-wasip2
+      - run: cargo build --target wasm32-wasip2 --release --manifest-path extensions/zed/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: code-inspection-zed
+          path: extensions/zed/target/wasm32-wasip2/release/code_inspection_zed.wasm

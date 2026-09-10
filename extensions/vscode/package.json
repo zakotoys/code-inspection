@@ -1,0 +1,63 @@
+{
+  "name": "code-inspection-vscode",
+  "displayName": "Code Inspection",
+  "description": "Save-triggered ESLint, TypeScript, and build diagnostics with a local MCP server.",
+  "version": "0.1.0",
+  "publisher": "zakotoys",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZakoToys/code-inspection"
+  },
+  "engines": {
+    "vscode": "^1.103.0"
+  },
+  "categories": ["Linters", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeInspection.run",
+        "title": "Code Inspection: Run"
+      },
+      {
+        "command": "codeInspection.cancel",
+        "title": "Code Inspection: Cancel Last Run"
+      }
+    ],
+    "configuration": {
+      "title": "Code Inspection",
+      "properties": {
+        "codeInspection.defaultInspector": {
+          "type": "string",
+          "enum": ["eslint", "typescript", "build"],
+          "default": "eslint",
+          "description": "Inspector used by the manual run command."
+        },
+        "codeInspection.runtimePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a code-inspection-lsp executable. Leave empty to use the packaged runtime."
+        }
+      }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "codeInspection",
+        "label": "Code Inspection"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node scripts/prepare-server.mjs && tsc -p tsconfig.json",
+    "package": "npm run build && vsce package --out ../../artifacts/code-inspection-vscode-0.1.0.vsix"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.1.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.103.0",
+    "typescript": "^6.0.3"
+  }
+}

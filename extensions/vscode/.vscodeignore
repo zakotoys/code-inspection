@@ -1,0 +1,7 @@
+src/**
+scripts/**
+tsconfig.json
+*.tsbuildinfo
+server/*.map
+server/*.LEGAL.txt
+dist/*.map
