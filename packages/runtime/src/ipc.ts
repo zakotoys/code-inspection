@@ -1,7 +1,9 @@
+import { realpathSync } from "node:fs";
 import { chmod, mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, connect, type Server, type Socket } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from "vscode-jsonrpc/node";
 import {
   canonicalizeWorkspaceRoot,
@@ -21,6 +23,7 @@ import { createStderrLogger } from "./logger.js";
 
 const STARTUP_TIMEOUT_MS = 10_000;
 const RETRY_DELAY_MS = 100;
+const UNIX_SOCKET_PATH_LIMIT = 100;
 
 export interface WorkspaceClient {
   readonly root: string;
@@ -127,6 +130,11 @@ export async function startServiceOwner(rootInput: string, api: ServiceApi, logg
   };
   server.on("connection", onClient);
   server.on("error", (error) => logger.error("Workspace service listener error", error));
+  if (process.platform !== "win32") {
+    const endpointDirectory = dirname(endpoint);
+    await mkdir(endpointDirectory, { recursive: true });
+    await chmod(endpointDirectory, 0o700).catch((error: unknown) => logger.warn("Unable to restrict workspace socket directory permissions", error));
+  }
   await listen(server, endpoint);
   if (process.platform !== "win32") await chmod(endpoint, 0o600).catch((error: unknown) => logger.warn("Unable to restrict workspace socket permissions", error));
   await writeDiscovery(paths.discoveryPath, {
@@ -231,7 +239,9 @@ async function startOwner(root: string, paths: ReturnType<typeof discoveryPaths>
     if (ownerState === "live-incompatible") {
       throw new Error("A live workspace service with an incompatible protocol is already running. Stop or update that service before retrying.");
     }
-    const serviceScript = join(dirname(resolve(process.argv[1] ?? ".")), "service-host.js");
+    const entryPath = process.argv[1];
+    if (!entryPath) throw new Error("Unable to locate the runtime entry point for the workspace service.");
+    const serviceScript = join(dirname(realpathSync(entryPath)), "service-host.js");
     const { spawn } = await import("node:child_process");
     const child = spawn(process.execPath, [serviceScript, "--root", root, "--endpoint", paths.endpoint], {
       detached: true,
@@ -355,8 +365,22 @@ async function openSocket(endpoint: string): Promise<Socket> {
 function discoveryPaths(root: string): { directory: string; discoveryPath: string; lockPath: string; endpoint: string } {
   const directory = join(defaultDataDirectory(), "instances");
   const key = pathForWorkspaceKey(root);
-  const endpoint = process.platform === "win32" ? `\\\\.\\pipe\\code-inspection-${key}-${pathForWorkspaceKey(directory).slice(0, 8)}` : join(directory, `${key}.sock`);
+  const endpointKey = `${key}-${pathForWorkspaceKey(directory).slice(0, 8)}`;
+  const endpoint = process.platform === "win32"
+    ? `\\\\.\\pipe\\code-inspection-${endpointKey}`
+    : unixSocketEndpoint(directory, endpointKey);
   return { directory, discoveryPath: join(directory, `${key}.json`), lockPath: join(directory, `${key}.lock`), endpoint };
+}
+
+function unixSocketEndpoint(directory: string, endpointKey: string): string {
+  const preferred = join(directory, `${endpointKey}.sock`);
+  if (preferred.length < UNIX_SOCKET_PATH_LIMIT) return preferred;
+  const userKey = typeof process.getuid === "function" ? String(process.getuid()) : "user";
+  const filename = `${endpointKey}.sock`;
+  const candidates = [join(tmpdir(), `code-inspection-${userKey}`), join("/tmp", `code-inspection-${userKey}`)];
+  const short = candidates.find((candidate) => join(candidate, filename).length < UNIX_SOCKET_PATH_LIMIT);
+  if (!short) throw new Error("Unable to create a workspace IPC socket: the system temporary path is too long.");
+  return join(short, filename);
 }
 
 async function readDiscovery(filePath: string): Promise<DiscoveryRecord | undefined> {
