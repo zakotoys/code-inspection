@@ -17,8 +17,8 @@ import {
   type InspectorId,
   type RunSnapshot
 } from "@zakotoys/code-inspection-core";
-import { watch, type FSWatcher } from "node:fs";
-import { isAbsolute } from "node:path";
+import { statSync, watch, type FSWatcher } from "node:fs";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 import type { Logger } from "@zakotoys/code-inspection-core";
 import type {
   CancelRunParams,
@@ -301,8 +301,10 @@ export class WorkspaceService implements ServiceApi {
   }
 
   private startWatcher(): void {
+    const watcherStartedAt = Date.now();
     const onChange = (_eventType: string, filename: string | Buffer | null): void => {
       const watchedFile = filename ? String(filename).replaceAll("\\", "/") : undefined;
+      if (isInitialWatcherEvent(this.root, watchedFile, watcherStartedAt)) return;
       let relativeFile = watchedFile;
       if (watchedFile && isAbsolute(watchedFile)) {
         try {
@@ -419,6 +421,21 @@ function isSourceFile(file: string): boolean {
 function isIgnoredExternalPath(file: string): boolean {
   const firstSegment = file.replaceAll("\\", "/").split("/")[0]?.toLowerCase();
   return firstSegment !== undefined && [".git", "node_modules", "dist", "coverage", "target", ".cache", ".next", "out", "build"].includes(firstSegment);
+}
+
+function isInitialWatcherEvent(root: string, watchedFile: string | undefined, watcherStartedAt: number): boolean {
+  if (!watchedFile) return false;
+  // macOS can replay events for paths that existed before watch() was attached.
+  const target = !isAbsolute(watchedFile) && watchedFile === basename(root)
+    ? root
+    : isAbsolute(watchedFile) ? watchedFile : resolve(root, watchedFile);
+  const relation = relative(root, target);
+  if (relation.startsWith("..") || isAbsolute(relation)) return false;
+  try {
+    return Math.floor(statSync(target).mtimeMs) <= watcherStartedAt;
+  } catch {
+    return false;
+  }
 }
 
 function cloneRun(run: InspectionRun): InspectionRun {
