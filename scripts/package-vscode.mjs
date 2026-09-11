@@ -26,7 +26,7 @@ try {
   await cp(join(extensionRoot, "package.json"), join(stageRoot, "package.json"));
   await cp(join(extensionRoot, "dist"), join(stageRoot, "dist"), { recursive: true });
   await cp(join(extensionRoot, "server"), join(stageRoot, "server"), { recursive: true });
-  await cp(join(repositoryRoot, "LICENSE.txt"), join(stageRoot, "LICENSE.txt"));
+  await cp(join(repositoryRoot, "LICENSE"), join(stageRoot, "LICENSE.txt"));
   await cp(join(extensionRoot, ".vscodeignore"), join(stageRoot, ".vscodeignore"));
   await copyPackage("vscode-languageclient");
   await mkdir(resolve("artifacts"), { recursive: true });

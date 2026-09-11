@@ -7,7 +7,7 @@ const bundledRoot = resolve(extensionRoot, "../../packages/runtime/dist/bundles"
 const serverRoot = resolve(extensionRoot, "server");
 
 await mkdir(serverRoot, { recursive: true });
-await cp(resolve(extensionRoot, "../../LICENSE.txt"), resolve(extensionRoot, "LICENSE.txt"));
+await cp(resolve(extensionRoot, "../../LICENSE"), resolve(extensionRoot, "LICENSE.txt"));
 await rm(resolve(serverRoot, "lsp.js"), { force: true });
 await rm(resolve(serverRoot, "mcp.js"), { force: true });
 await rm(resolve(serverRoot, "service-host.js"), { force: true });

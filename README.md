@@ -82,6 +82,7 @@ Build and install the VS Code package locally with:
 
 ```text
 npm install
+npm run build
 npm run package:vscode
 ```
 
