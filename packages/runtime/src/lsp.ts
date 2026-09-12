@@ -48,8 +48,7 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
         openClose: true,
         change: TextDocumentSyncKind.Incremental,
         save: { includeText: false }
-      },
-      executeCommandProvider: { commands: ["codeInspection.run", "codeInspection.cancel"] }
+      }
     },
     serverInfo: { name: "code-inspection", version: "0.1.0" }
   };
