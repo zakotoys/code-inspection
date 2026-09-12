@@ -1,7 +1,9 @@
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import assert from "node:assert/strict";
+import { withTimeout } from "./smoke-timeout.mjs";
 import { pathToFileURL } from "node:url";
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
 import { TrustStore } from "../packages/core/dist/index.js";
@@ -23,40 +25,47 @@ const child = spawn(process.execPath, [lspEntry], {
 child.stderr.on("data", (chunk) => process.stderr.write(chunk));
 
 const connection = createMessageConnection(new StreamMessageReader(child.stdout), new StreamMessageWriter(child.stdin));
-const diagnostics = new Promise((resolvePromise, reject) => {
-  const timeout = setTimeout(() => reject(new Error("Timed out waiting for LSP diagnostics.")), 10_000);
+const diagnostics = new Promise((resolvePromise) => {
   connection.onNotification("textDocument/publishDiagnostics", (params) => {
     if (params.uri === fileUri) {
-      clearTimeout(timeout);
       resolvePromise(params);
     }
   });
 });
 
 try {
-  connection.listen();
-  await connection.sendRequest("initialize", {
-    processId: process.pid,
-    rootUri: workspaceUri,
-    capabilities: {},
-    initializationOptions: process.env.CODE_INSPECTION_LSP_TRUSTED === "false" ? {} : { trusted: true },
-    workspaceFolders: [{ uri: workspaceUri, name: "fixture" }]
-  });
-  connection.sendNotification("initialized", {});
-  connection.sendNotification("textDocument/didOpen", {
-    textDocument: {
-      uri: fileUri,
-      languageId: "javascript",
-      version: 1,
-      text: await readFile(filePath, "utf8")
+  await withTimeout(async () => {
+    connection.listen();
+    const initialized = await connection.sendRequest("initialize", {
+      processId: process.pid,
+      rootUri: workspaceUri,
+      capabilities: {},
+      initializationOptions: process.env.CODE_INSPECTION_LSP_TRUSTED === "false" ? {} : { trusted: true },
+      workspaceFolders: [{ uri: workspaceUri, name: "fixture" }]
+    });
+    assert.equal(initialized.capabilities.textDocumentSync.change, 2);
+    connection.sendNotification("initialized", {});
+    connection.sendNotification("textDocument/didOpen", {
+      textDocument: {
+        uri: fileUri,
+        languageId: "javascript",
+        version: 1,
+        text: await readFile(filePath, "utf8")
+      }
+    });
+    connection.sendNotification("textDocument/didSave", { textDocument: { uri: fileUri } });
+    const result = await diagnostics;
+    assert.equal(result.diagnostics.length, 3, "Expected three ESLint diagnostics, not a service error.");
+    for (const diagnostic of result.diagnostics) {
+      assert.equal(diagnostic.source, "code-inspection/eslint");
+      assert.equal(diagnostic.severity, 1);
+      assert.ok(diagnostic.code);
+      assert.ok(diagnostic.range.start.line >= 0 && diagnostic.range.start.character >= 0);
     }
-  });
-  connection.sendNotification("textDocument/didSave", { textDocument: { uri: fileUri } });
-  const result = await diagnostics;
-  if (!Array.isArray(result.diagnostics) || result.diagnostics.length === 0) throw new Error("LSP save produced no diagnostics for the broken fixture.");
-  process.stdout.write(`LSP smoke passed: ${result.diagnostics.length} diagnostic(s).\n`);
-  await connection.sendRequest("shutdown");
-  connection.sendNotification("exit");
+    process.stdout.write(`LSP smoke passed: ${result.diagnostics.length} diagnostic(s).\n`);
+    await connection.sendRequest("shutdown");
+    connection.sendNotification("exit");
+  }, 15_000, "LSP smoke");
 } finally {
   connection.dispose();
   child.kill();

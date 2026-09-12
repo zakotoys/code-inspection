@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   TrustStore,
   WorkspaceTrustError,
@@ -12,23 +12,102 @@ import {
 import { WorkspaceService } from "../src/service.js";
 
 const repoRoot = resolve(import.meta.dirname, "../../../");
+const services: WorkspaceService[] = [];
+const dataDirectories: string[] = [];
+
+async function temporaryTrustStore(): Promise<TrustStore> {
+  const directory = await mkdtemp(join(tmpdir(), "code-inspection-runtime-"));
+  dataDirectories.push(directory);
+  return new TrustStore(directory);
+}
+
+afterEach(async () => {
+  await Promise.all(services.splice(0).map((service) => service.dispose()));
+  await Promise.all(dataDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
 
 async function serviceFor(fixture: string, trusted = true): Promise<WorkspaceService> {
   const root = await canonicalizeWorkspaceRoot(join(repoRoot, "tests/fixtures", fixture));
-  const trustStore = new TrustStore(await mkdtemp(join(tmpdir(), "code-inspection-runtime-")));
+  const trustStore = await temporaryTrustStore();
   if (trusted) await trustStore.grant(root);
-  return WorkspaceService.create(root, { logger: noopLogger, trustStore });
+  const service = await WorkspaceService.create(root, { logger: noopLogger, trustStore });
+  services.push(service);
+  return service;
 }
 
 async function waitForRun(service: WorkspaceService, runId: string): Promise<InspectionRun> {
-  for (;;) {
+  const deadline = Date.now() + 4000;
+  while (Date.now() < deadline) {
     const result = await service.getRun({ runId });
     if (["completed", "failed", "cancelled", "superseded"].includes(result.snapshot.run.outcome)) return result.snapshot.run;
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
   }
+  throw new Error(`Timed out waiting for run ${runId}`);
 }
 
 describe("workspace service", () => {
+  it("reports unknown runs without creating state", async () => {
+    const service = await serviceFor("eslint-clean");
+    await expect(service.getRun({ runId: "missing" })).rejects.toThrow("Run not found");
+    await expect(service.cancelRun({ runId: "missing" })).rejects.toThrow("Run not found");
+    expect((await service.getStatus()).activeRuns).toEqual([]);
+  });
+
+  it("rejects escaping and oversized scopes before scheduling", async () => {
+    const service = await serviceFor("eslint-clean");
+    for (const files of [["../eslint-broken/broken.js"], Array(101).fill("clean.js")]) {
+      await expect(service.runInspection({ inspector: "eslint", scope: { files }, trigger: "save" })).rejects.toThrow();
+    }
+    expect((await service.getStatus()).activeRuns).toEqual([]);
+  });
+
+  it("returns a failed run for a disabled inspector", async () => {
+    const service = await serviceFor("eslint-clean");
+    const { run } = await service.runInspection({ inspector: "build", trigger: "manual" });
+    expect(run).toMatchObject({ outcome: "failed", error: { code: "inspector-disabled" } });
+    expect((await service.getStatus()).activeRuns).toEqual([]);
+  });
+
+  it("cancels a queued run idempotently without publishing findings", async () => {
+    const service = await serviceFor("eslint-broken");
+    const { run } = await service.runInspection({ inspector: "eslint", trigger: "save" });
+    expect(run.outcome).toBe("queued");
+    expect((await service.cancelRun({ runId: run.runId })).run.outcome).toBe("cancelled");
+    expect((await service.cancelRun({ runId: run.runId })).run.outcome).toBe("cancelled");
+    expect((await service.getStatus()).activeRuns).toEqual([]);
+    expect((await service.getFindings({ offset: 0, limit: 50, includeStale: true })).page.total).toBe(0);
+  });
+
+  it("supersedes queued work when its document changes", async () => {
+    const service = await serviceFor("eslint-broken");
+    const { run } = await service.runInspection({ inspector: "eslint", trigger: "save" });
+    await service.didChange({ file: "broken.js" });
+    const { snapshot } = await service.getRun({ runId: run.runId });
+    expect(snapshot.run.outcome).toBe("superseded");
+    expect(snapshot.freshness.dirtyFiles).toEqual(["broken.js"]);
+    expect((await service.getStatus()).activeRuns).toEqual([]);
+  });
+
+  it("paginates and filters findings without duplicates or phantom next pages", async () => {
+    const service = await serviceFor("eslint-broken");
+    const { run } = await service.runInspection({ inspector: "eslint", trigger: "manual" });
+    await waitForRun(service, run.runId);
+    const first = (await service.getFindings({ offset: 0, limit: 2, includeStale: false, file: "broken.js" })).page;
+    expect(first).toMatchObject({ total: 3, count: 2, hasMore: true, nextOffset: 2 });
+    const last = (await service.getFindings({ offset: first.nextOffset!, limit: 2, includeStale: false })).page;
+    expect(last).toMatchObject({ total: 3, count: 1, hasMore: false });
+    expect(last.nextOffset).toBeUndefined();
+    expect(new Set([...first.findings, ...last.findings].map((finding) => finding.id)).size).toBe(3);
+    for (const filter of [{ offset: 3 }, { inspector: "build" as const }, { file: "absent.js" }]) {
+      const { page } = await service.getFindings({ offset: 0, limit: 2, includeStale: false, ...filter });
+      expect(page.count).toBe(0);
+      expect(page.hasMore).toBe(false);
+    }
+    await service.didChange({ file: "broken.js" });
+    expect((await service.getFindings({ offset: 0, limit: 50, includeStale: false })).page.total).toBe(0);
+    expect((await service.getFindings({ offset: 0, limit: 50, includeStale: true })).page.total).toBe(3);
+  });
+
   it("requires explicit trust before execution", async () => {
     const service = await serviceFor("eslint-clean", false);
     await expect(service.runInspection({ inspector: "eslint", trigger: "manual" })).rejects.toBeInstanceOf(WorkspaceTrustError);
@@ -72,7 +151,7 @@ describe("workspace service", () => {
     await writeFile(join(rootPath, "broken.js"), "const unused = 1;\n", "utf8");
     await writeFile(join(rootPath, ".code-inspection.json"), JSON.stringify({ version: 1, inspectors: { eslint: { enabled: true, cwd: ".", patterns: ["**/*.js"] } } }), "utf8");
     const root = await canonicalizeWorkspaceRoot(rootPath);
-    const trustStore = new TrustStore(await mkdtemp(join(tmpdir(), "code-inspection-save-")));
+    const trustStore = await temporaryTrustStore();
     await trustStore.grant(root);
     const service = await WorkspaceService.create(root, { logger: noopLogger, trustStore });
     try {
