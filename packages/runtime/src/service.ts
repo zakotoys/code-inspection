@@ -18,7 +18,7 @@ import {
   type RunSnapshot
 } from "@zakotoys/code-inspection-core";
 import { statSync, watch, type FSWatcher } from "node:fs";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { Logger } from "@zakotoys/code-inspection-core";
 import type {
   CancelRunParams,
@@ -426,13 +426,14 @@ function isIgnoredExternalPath(file: string): boolean {
 function isInitialWatcherEvent(root: string, watchedFile: string | undefined, watcherStartedAt: number): boolean {
   if (!watchedFile) return false;
   // macOS can replay events for paths that existed before watch() was attached.
-  const target = !isAbsolute(watchedFile) && watchedFile === basename(root)
-    ? root
-    : isAbsolute(watchedFile) ? watchedFile : resolve(root, watchedFile);
+  const target = resolve(root, watchedFile);
   const relation = relative(root, target);
   if (relation.startsWith("..") || isAbsolute(relation)) return false;
   try {
-    return Math.floor(statSync(target).mtimeMs) <= watcherStartedAt;
+    const stats = statSync(target);
+    // Replacements can preserve mtime, but still update the metadata change time.
+    // Keep events on the startup millisecond because their ordering is ambiguous.
+    return Math.max(stats.mtimeMs, stats.ctimeMs) < watcherStartedAt;
   } catch {
     return false;
   }

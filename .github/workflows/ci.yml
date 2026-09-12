@@ -20,6 +20,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: node scripts/smoke-lsp.mjs
+      - run: node scripts/smoke-mcp.mjs
+      - run: npm run package:core && npm run package:runtime
+      - run: npm run smoke:package
 
   vscode-package:
     name: VS Code package

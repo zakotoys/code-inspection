@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   InspectionEngine,
   InspectionExecutionError,
@@ -14,12 +14,31 @@ import {
 } from "../src/index.js";
 
 const repoRoot = resolve(import.meta.dirname, "../../../");
+const temporaryDirectories: string[] = [];
+
+async function temporaryDirectory(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
 
 function request(inspector: InspectionRequest["inspector"]): InspectionRequest {
   return { runId: `test-${inspector}`, inspector, scope: {}, trigger: "cli", generation: 1 };
 }
 
 describe("inspection engine", () => {
+  it("returns an empty result and zero counts for a clean workspace", async () => {
+    const root = await canonicalizeWorkspaceRoot(join(repoRoot, "tests/fixtures/eslint-clean"));
+    const config = await loadWorkspaceConfig(root);
+    const output = await new InspectionEngine({ root, config }).run(request("eslint"));
+    expect(output.findings).toEqual([]);
+    expect(output.summary).toMatchObject({ errorCount: 0, warningCount: 0, infoCount: 0, hintCount: 0 });
+  });
+
   it("normalizes structured ESLint diagnostics into zero-based UTF-16 ranges", async () => {
     const root = await canonicalizeWorkspaceRoot(join(repoRoot, "tests/fixtures/eslint-broken"));
     const config = await loadWorkspaceConfig(root);
@@ -53,7 +72,7 @@ describe("inspection engine", () => {
   });
 
   it("reports a missing project tool as an execution error", async () => {
-    const root = await canonicalizeWorkspaceRoot(await mkdtemp(join(tmpdir(), "code-inspection-no-tool-")));
+    const root = await canonicalizeWorkspaceRoot(await temporaryDirectory("code-inspection-no-tool-"));
     const config = await loadWorkspaceConfig(root);
 
     await expect(new InspectionEngine({ root, config }).run(request("eslint"))).rejects.toMatchObject<Partial<InspectionExecutionError>>({ code: "missing-tool" });
@@ -67,8 +86,8 @@ describe("workspace paths and trust", () => {
   });
 
   it("stores explicit trust outside the workspace and invalidates it after config changes", async () => {
-    const dataDirectory = await mkdtemp(join(tmpdir(), "code-inspection-trust-"));
-    const workspace = await mkdtemp(join(tmpdir(), "code-inspection-trusted-workspace-"));
+    const dataDirectory = await temporaryDirectory("code-inspection-trust-");
+    const workspace = await temporaryDirectory("code-inspection-trusted-workspace-");
     await writeFile(join(workspace, ".code-inspection.json"), '{"version":1}\n', "utf8");
     const root = await canonicalizeWorkspaceRoot(workspace);
     const store = new TrustStore(dataDirectory);
