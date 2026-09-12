@@ -9,7 +9,7 @@
         "${workspaceFolder}/tests/fixtures/workspace",
         "--extensionDevelopmentPath=${workspaceFolder}"
       ],
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js", "${workspaceFolder}/dist/**/*.cjs"],
       "preLaunchTask": "npm: compile"
     }
   ]

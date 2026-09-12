@@ -11,7 +11,7 @@
   "categories": [
     "Other"
   ],
-  "main": "./dist/src/extension.js",
+  "main": "./dist/extension.cjs",
   "contributes": {
     "commands": [
       {
@@ -23,23 +23,106 @@
         "command": "codeInspection.showDiagnostics",
         "title": "查看当前诊断",
         "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.startMcp",
+        "title": "启动 MCP 服务",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.stopMcp",
+        "title": "停止 MCP 服务",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.copyMcpConfig",
+        "title": "复制 MCP 配置",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.inspectMcp",
+        "title": "通过 MCP 查询当前诊断",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.showSaveObservations",
+        "title": "查看保存观测批次",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.inspectSaveBatches",
+        "title": "通过 MCP 续读保存批次",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.resetSaveBatchCursor",
+        "title": "重置保存批次读取位置",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.pause",
+        "title": "暂停保存观测",
+        "category": "Code Inspection"
+      },
+      {
+        "command": "codeInspection.resume",
+        "title": "恢复保存观测",
+        "category": "Code Inspection"
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "codeInspection",
+        "label": "Code Inspection"
       }
     ]
   },
   "scripts": {
-    "compile": "tsc -p .",
-    "watch": "tsc -watch -p .",
+    "compile": "tsc -p . && node scripts/build.cjs",
+    "watch": "node scripts/build.cjs --watch",
     "typecheck": "tsc -p . --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "npm run compile && node --test dist/tests/store.test.js && node scripts/test-extension.cjs",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "test": "npm run compile && node --test dist/tests/environment.test.js dist/tests/store.test.js dist/tests/save-observations.test.js dist/tests/save-history.test.js dist/tests/mcp.test.js && node scripts/test-extension.cjs",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "test:protocol": "npm run compile && node --test dist/tests/environment.test.js dist/tests/store.test.js dist/tests/save-observations.test.js dist/tests/save-history.test.js dist/tests/mcp.test.js",
+    "mcp:inspect": "node scripts/inspect-mcp.cjs",
+    "vscode:prepublish": "npm run compile",
+    "package": "node scripts/package.cjs",
+    "test:installed": "node scripts/test-extension.cjs --installed",
+    "verify": "npm run check && npm run package && npm run test:installed"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
     "@types/node": "^22.0.0",
     "@types/vscode": "1.137.0",
     "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.2",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.6.2"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zakotoys/code-inspection.git"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Only local file workspaces are supported."
+    },
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Local diagnostics only; MCP startup requires workspace trust."
+    }
   }
 }

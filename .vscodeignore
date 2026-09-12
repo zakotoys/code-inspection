@@ -1,0 +1,10 @@
+**
+!package.json
+!README.md
+!LICENSE
+!dist/extension.cjs
+!dist/THIRD_PARTY_NOTICES.txt
+!knowledge/*.md
+!examples/sample.ts
+!examples/tsconfig.json
+!examples/README.md
