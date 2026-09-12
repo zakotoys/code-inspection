@@ -2,14 +2,13 @@
 
 The extension attaches the Code Inspection LSP to JavaScript, TypeScript, and TSX buffers. It uses the editor's `textDocument/didSave` notification, so it can run beside the existing JavaScript/TypeScript language server.
 
-Install the runtime before enabling the extension:
+Install the runtime from the local core/runtime tarballs using the [repository quick start](../../README.md#quick-start-from-this-repository), then trust the workspace before enabling the extension:
 
 ```text
-npm install --global @zakotoys/code-inspection-runtime
 code-inspection trust /path/to/workspace
 ```
 
-The runtime executable must be available as `code-inspection-lsp` on Zed's PATH. Zed MCP is configured separately through native context-server settings because MCP-only extension wrappers are deprecated:
+The runtime executable must be available as `code-inspection-lsp` on Zed's PATH. Configure Zed MCP separately through native context-server settings. Pass an absolute `workspace` in MCP tool calls if the server's working directory is not the inspected project:
 
 ```json
 {
