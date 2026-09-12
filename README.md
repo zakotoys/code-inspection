@@ -1,6 +1,6 @@
 # Code Inspection
 
-ZakoToys 的 VS Code 诊断扩展，使用 TypeScript 实现。当前完成 G1—G7 的本地实现：诊断采集、保存历史、MCP 查询、暂停恢复及可安装 VSIX。本机开发/安装测试通过；GitHub CI 配置已加入但尚未远端执行，项目实际 Agent/设备联调仍待 G8。
+ZakoToys 的 VS Code 诊断扩展，使用 TypeScript 实现。当前完成 G1—G7 的本地实现：诊断采集、保存历史、MCP 查询、暂停恢复及可安装 VSIX。本机开发/安装测试通过；GitHub Linux CI 已通过，项目实际 Agent/设备联调仍待 G8。
 
 ## 安装开发预览
 
@@ -146,4 +146,4 @@ npm run check
 
 ## 项目进展
 
-见 [项目进度与交接边界](knowledge/project-status.md)：G1—G5 用户已验收，G6/G7 本机实现与验收通过，G8 实际消费端联调待完成。CI 文件存在不等于远端运行通过。
+见 [项目进度与交接边界](knowledge/project-status.md)：G1—G5 用户已验收，G6/G7 本机实现与验收通过，G8 实际消费端联调待完成。2026-09-12 已完成组织 PR 与个人 fork 的 Linux CI 验证，具体提交检查见 PR。
