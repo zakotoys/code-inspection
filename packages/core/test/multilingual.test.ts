@@ -78,10 +78,15 @@ describe("diagnostic parsers", () => {
   });
 
   it("parses pretty-printed go vet JSON", () => {
-    const diagnostics = getDiagnosticParser("go-json")(JSON.stringify({
+    const output = JSON.stringify({
       "example/module": { printf: [{ posn: "/workspace/main.go:4:9", end: "/workspace/main.go:4:12", message: "bad format" }] }
-    }, null, 2), "", context);
-    expect(diagnostics[0]).toMatchObject({ file: "/workspace/main.go", range: { start: { line: 3, character: 8 }, end: { line: 3, character: 11 } } });
+    }, null, 2);
+    for (const diagnostics of [
+      getDiagnosticParser("go-json")(output, "", context),
+      getDiagnosticParser("go-json")("", output, context)
+    ]) {
+      expect(diagnostics[0]).toMatchObject({ file: "/workspace/main.go", range: { start: { line: 3, character: 8 }, end: { line: 3, character: 11 } } });
+    }
   });
 
   it("parses concatenated go vet package documents", () => {
@@ -225,8 +230,8 @@ describe("matching and project discovery", () => {
       await writeFile(join(root, "packages", "two", "go.mod"), "module example.com/two\n");
       const pythonProjects = locateProjects(root, "python");
       expect(pythonProjects).toHaveLength(1);
-      expect(pythonProjects[0]?.root.endsWith("packages/one")).toBe(true);
-      expect(locateProject(root, "go", "packages/two/main.go").root.endsWith("packages/two")).toBe(true);
+      expect(pythonProjects[0]?.root.endsWith(join("packages", "one"))).toBe(true);
+      expect(locateProject(root, "go", "packages/two/main.go").root.endsWith(join("packages", "two"))).toBe(true);
       await writeFile(join(root, "compile_commands.json"), JSON.stringify([
         { directory: ".", file: "src/main.c", command: "clang -c src/main.c" },
         { directory: ".", file: "src/main.cpp", command: "clang++ -c src/main.cpp" },

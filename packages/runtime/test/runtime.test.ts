@@ -10,6 +10,7 @@ import {
   TrustStore,
   WorkspaceTrustError,
   canonicalizeWorkspaceRoot,
+  fileUriForPath,
   loadWorkspaceConfig,
   noopLogger,
   type InspectionRun
@@ -481,12 +482,12 @@ describe("workspace service", () => {
       expect(run.summary?.errorCount).toBeGreaterThan(0);
       const findings = await service.getFindings({ checkId: "typescript", offset: 0, limit: 50, includeStale: false });
       expect(findings.page.findings).toEqual(expect.arrayContaining([
-        expect.objectContaining({ file: expect.stringContaining("packages/nested/main.ts"), projectRoot: expect.stringContaining("packages/nested") })
+        expect.objectContaining({ file: fileUriForPath(join(nestedPath, "main.ts")), projectRoot: nestedPath })
       ]));
       const byConfig = await service.getFindings({ checkId: "typescript", project: "packages/nested/tsconfig.json", offset: 0, limit: 50, includeStale: false });
       expect(byConfig.page.findings).toHaveLength(findings.page.findings.length);
       expect(byConfig.runs).toEqual(expect.arrayContaining([
-        expect.objectContaining({ projectRoot: expect.stringContaining("packages/nested") })
+        expect.objectContaining({ projectRoot: nestedPath })
       ]));
     } finally {
       await service.dispose();

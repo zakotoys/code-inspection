@@ -1025,7 +1025,7 @@ function isInitialWatcherEvent(root: string, watchedFile: string | undefined, wa
   if (relation.startsWith("..") || isAbsolute(relation)) return false;
   try {
     const stats = statSync(target);
-    return Math.max(stats.mtimeMs, stats.ctimeMs) < watcherStartedAt;
+    return Math.max(stats.mtimeMs, stats.ctimeMs) <= watcherStartedAt;
   } catch {
     return false;
   }

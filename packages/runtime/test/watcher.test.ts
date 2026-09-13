@@ -51,7 +51,8 @@ describe("workspace watcher", () => {
         else await writeFile(file, "new content");
         await expect.poll(async () => (await current.getFindings({ offset: 0, limit: 10, includeStale: true })).page.findings[0]?.stale)
           .toBe(true);
-        expect((await current.getRun({ runId: queued.run.runId })).snapshot.run.outcome).toBe("superseded");
+        await expect.poll(async () => (await current.getRun({ runId: queued.run.runId })).snapshot.run.outcome)
+          .toBe("superseded");
       } finally {
         await service?.dispose();
         await rm(parent, { recursive: true, force: true });

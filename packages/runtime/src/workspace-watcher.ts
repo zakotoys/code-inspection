@@ -78,23 +78,36 @@ export async function watchWorkspace(rootInput: string, options: WorkspaceWatche
         return;
       }
       if (closed || !directoryStats.isDirectory() || directoryStats.isSymbolicLink()) return;
+      const knownEntries = new Set<string>();
       let watcher: FSWatcher;
       try {
         watcher = watch(directory, { persistent: false }, (eventType, filename) => {
           const name = filename ? String(filename).replaceAll("\\", "/") : undefined;
-          // macOS reports the watched directory's own basename for metadata
-          // changes (and Linux can do the same during a rename). Treat that as
-          // an unknown/root event instead of constructing `dir/dir`.
-          const changed = name
-            ? (name === basename(directory) ? directory : resolve(directory, name))
-            : undefined;
-          emit(eventType === "rename" ? "rename" : "change", changed);
-          if (!changed || !isPathWithin(root, changed)) return;
-          void stat(changed).then(async (stats) => {
-            if (stats.isDirectory()) await addDirectory(changed);
-          }).catch(() => {
-            if (eventType === "rename") removeSubtree(changed);
-          });
+          const normalizedEvent = eventType === "rename" ? "rename" : "change";
+          if (!name) {
+            emit(normalizedEvent);
+            return;
+          }
+          const changed = resolve(directory, name);
+          const processEntry = (): void => {
+            emit(normalizedEvent, changed);
+            if (!isPathWithin(root, changed)) return;
+            void stat(changed).then(async (stats) => {
+              knownEntries.add(name);
+              if (stats.isDirectory()) await addDirectory(changed);
+            }).catch(() => {
+              knownEntries.delete(name);
+              if (eventType === "rename") removeSubtree(changed);
+            });
+          };
+          // macOS can report a watched directory's own basename for metadata
+          // changes. Only treat that ambiguous name as a child when the child
+          // exists now or was present before a deletion event.
+          if (name === basename(directory) && !knownEntries.has(name)) {
+            void lstat(changed).then(processEntry).catch(() => undefined);
+            return;
+          }
+          processEntry();
         });
       } catch (error) {
         options.onError?.(error);
@@ -121,6 +134,7 @@ export async function watchWorkspace(rootInput: string, options: WorkspaceWatche
         return;
       }
       if (closed) return;
+      for (const entry of entries) knownEntries.add(entry.name);
       await Promise.all(entries
         .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
         .map((entry) => addDirectory(resolve(directory, entry.name))));

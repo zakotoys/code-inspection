@@ -160,11 +160,15 @@ function parsePyrightJson(stdout: string, _stderr: string, _context: ParserConte
 function parseGoJson(stdout: string, stderr: string, context: ParserContext): RawDiagnostic[] {
   const values: RawDiagnostic[] = [];
   // `go vet -json` emits one pretty-printed JSON object per package. Parse the
-  // complete stream first, including concatenated package documents;
-  // line-delimited JSON is used by some wrappers.
-  for (const parsed of parseJsonDocuments(stdout)) walkGoValue(parsed, values, context);
+  // complete streams first, including concatenated package documents. Go
+  // versions have written this structured output to both stdout and stderr;
+  // line-delimited JSON is also used by some wrappers.
+  for (const stream of [stdout, stderr]) {
+    for (const parsed of parseJsonDocuments(stream)) walkGoValue(parsed, values, context);
+  }
   if (values.length > 0) return dedupeDiagnostics(values);
-  for (const line of stdout.split(/\r?\n/)) {
+  const combined = stdout + (stdout && stderr ? "\n" : "") + stderr;
+  for (const line of combined.split(/\r?\n/)) {
     if (!line.trim()) continue;
     try {
       walkGoValue(JSON.parse(line) as unknown, values, context);
@@ -439,9 +443,21 @@ function sarifArtifactPath(artifact: Record<string, unknown>, bases: Record<stri
     }
   }
   if (decoded.startsWith("file:")) {
-    try { return fileURLToPath(new URL(decoded)); } catch { /* keep the URI when it is not a valid file URL */ }
+    try { return fileUrlPath(decoded); } catch { /* keep the URI when it is not a valid file URL */ }
   }
   return decoded;
+}
+
+function fileUrlPath(value: string): string {
+  const url = new URL(value);
+  try {
+    return fileURLToPath(url);
+  } catch (error) {
+    // Windows rejects absolute POSIX file URLs even though they are valid
+    // SARIF emitted by tools running in containers or remote environments.
+    if (url.protocol === "file:" && !url.hostname && url.pathname.startsWith("/")) return decodeUri(url.pathname);
+    throw error;
+  }
 }
 
 function decodeUri(value: string): string {
@@ -565,7 +581,7 @@ function sourceLine(file: string, line: number, context: ParserContext): string 
 
 function sourceText(file: string, context: ParserContext): string | undefined {
   try {
-    const raw = file.startsWith("file://") ? fileURLToPath(file) : file;
+    const raw = file.startsWith("file://") ? fileUrlPath(file) : file;
     const candidates = isAbsolute(raw) ? [raw] : [join(context.cwd, raw), join(context.root, raw)];
     for (const candidate of candidates) {
       try {
