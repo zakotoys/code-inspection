@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { defaultDataDirectory, formatError, pathForWorkspaceKey } from "./config.js";
+import { defaultDataDirectory, formatError, loadWorkspaceConfig, pathForWorkspaceKey } from "./config.js";
 
 interface TrustRecord {
   root: string;
@@ -31,6 +31,10 @@ export class TrustStore {
   }
 
   async grant(root: string): Promise<void> {
+    // Trust is an approval of the exact executable configuration, not merely
+    // of a directory. Validate the v2 configuration before recording it so a
+    // malformed or obsolete file cannot be marked trusted and fail later.
+    await loadWorkspaceConfig(root);
     const directory = join(this.dataDirectory, "trust");
     await mkdir(directory, { recursive: true });
     if (process.platform !== "win32") await chmod(directory, 0o700);

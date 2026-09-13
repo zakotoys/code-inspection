@@ -29,9 +29,10 @@ try {
   await cp(join(repositoryRoot, "LICENSE"), join(stageRoot, "LICENSE.txt"));
   await cp(join(extensionRoot, ".vscodeignore"), join(stageRoot, ".vscodeignore"));
   await copyPackage("vscode-languageclient");
+  await copyPackage("zod");
   await mkdir(resolve("artifacts"), { recursive: true });
   const vsce = resolve(repositoryRoot, "node_modules/@vscode/vsce/vsce");
-  const output = resolve("artifacts/code-inspection-vscode-0.1.0.vsix");
+  const output = resolve("artifacts/code-inspection-vscode-0.2.0.vsix");
   const exitCode = await new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [vsce, "package", "--out", output], { cwd: stageRoot, stdio: "inherit", windowsHide: true });
     child.once("error", reject);

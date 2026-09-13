@@ -10,7 +10,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   output = vscode.window.createOutputChannel("Code Inspection");
   context.subscriptions.push(output);
   const runtimePath = vscode.workspace.getConfiguration("codeInspection").get<string>("runtimePath", "");
-  const bundledLsp = context.asAbsolutePath("server/lsp.js");
+  const bundledLsp = context.asAbsolutePath("server/lsp.cjs");
   const startClients = async (): Promise<void> => {
     const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
     const currentUris = new Set(workspaceFolders.map((folder) => folder.uri.toString()));
@@ -29,13 +29,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         run: { command, args, options: { cwd: workspaceFolder.uri.fsPath } },
         debug: { command, args, options: { cwd: workspaceFolder.uri.fsPath } }
       };
+      const workspacePattern = { baseUri: workspaceFolder.uri.toString(), pattern: "**/*" };
+      const documentSelector: NonNullable<LanguageClientOptions["documentSelector"]> = [
+        "javascript", "javascriptreact", "typescript", "typescriptreact",
+        "python", "java", "go", "rust", "c", "cpp"
+      ].map((language) => ({ scheme: "file", language, pattern: workspacePattern }));
       const clientOptions: LanguageClientOptions = {
-        documentSelector: [
-          { scheme: "file", language: "javascript" },
-          { scheme: "file", language: "javascriptreact" },
-          { scheme: "file", language: "typescript" },
-          { scheme: "file", language: "typescriptreact" }
-        ],
+        documentSelector,
         initializationOptions: { trusted: vscode.workspace.isTrusted },
         workspaceFolder
       };
@@ -56,14 +56,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => { void startClients(); }));
 
   context.subscriptions.push(vscode.commands.registerCommand("codeInspection.run", async () => {
-    const inspector = vscode.workspace.getConfiguration("codeInspection").get<"eslint" | "typescript" | "build">("defaultInspector", "eslint");
+    const checkId = vscode.workspace.getConfiguration("codeInspection").get<string>("defaultCheck", "eslint");
     try {
       const client = clientForActiveEditor();
       if (!client) throw new Error("No workspace language server is available.");
-      const result = await client.sendRequest<{ runId: string }>("codeInspection/run", { inspector });
+      const result = await client.sendRequest<{ runId: string }>("codeInspection/run", { checkId });
       lastRunId = result?.runId;
       lastRunClient = client;
-      output.appendLine(`Started ${inspector} inspection${lastRunId ? ` (${lastRunId})` : ""}.`);
+      output.appendLine(`Started ${checkId} inspection${lastRunId ? ` (${lastRunId})` : ""}.`);
       output.show(true);
     } catch (error) {
       void vscode.window.showErrorMessage(`Code Inspection failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -92,7 +92,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 function registerMcpProvider(context: vscode.ExtensionContext, _bundledLsp: string): vscode.EventEmitter<void> | undefined {
   const api = vscode.lm;
   if (!api) return undefined;
-  const bundledMcp = context.asAbsolutePath("server/mcp.js");
+  const bundledMcp = context.asAbsolutePath("server/mcp.cjs");
   const definitionChanges = new vscode.EventEmitter<void>();
   context.subscriptions.push(definitionChanges);
   context.subscriptions.push(api.registerMcpServerDefinitionProvider("codeInspection", {
@@ -100,7 +100,7 @@ function registerMcpProvider(context: vscode.ExtensionContext, _bundledLsp: stri
     provideMcpServerDefinitions: async () => {
       if (!vscode.workspace.isTrusted) return [];
       return (vscode.workspace.workspaceFolders ?? []).map((workspaceFolder) => {
-        const definition = new vscode.McpStdioServerDefinition("Code Inspection", process.execPath, [bundledMcp], { CODE_INSPECTION_WORKSPACE: workspaceFolder.uri.fsPath }, "0.1.0");
+        const definition = new vscode.McpStdioServerDefinition("Code Inspection", process.execPath, [bundledMcp], { CODE_INSPECTION_WORKSPACE: workspaceFolder.uri.fsPath }, "0.2.0");
         definition.cwd = workspaceFolder.uri;
         return definition;
       });

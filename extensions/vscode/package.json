@@ -1,8 +1,8 @@
 {
   "name": "code-inspection-vscode",
   "displayName": "Code Inspection",
-  "description": "Save-triggered ESLint, TypeScript, and build diagnostics with a local MCP server.",
-  "version": "0.1.0",
+  "description": "Save-triggered multi-language diagnostics with a local workspace service and MCP server.",
+  "version": "0.2.0",
   "publisher": "zakotoys",
   "license": "Apache-2.0",
   "repository": {
@@ -29,11 +29,10 @@
     "configuration": {
       "title": "Code Inspection",
       "properties": {
-        "codeInspection.defaultInspector": {
+        "codeInspection.defaultCheck": {
           "type": "string",
-          "enum": ["eslint", "typescript", "build"],
           "default": "eslint",
-          "description": "Inspector used by the manual run command."
+          "description": "Configured check used by the manual run command."
         },
         "codeInspection.runtimePath": {
           "type": "string",
@@ -51,7 +50,7 @@
   },
   "scripts": {
     "build": "node scripts/prepare-server.mjs && tsc -p tsconfig.json",
-    "package": "npm run build && vsce package --out ../../artifacts/code-inspection-vscode-0.1.0.vsix"
+    "package": "npm run build && vsce package --out ../../artifacts/code-inspection-vscode-0.2.0.vsix"
   },
   "dependencies": {
     "vscode-languageclient": "^10.1.1"

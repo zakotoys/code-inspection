@@ -30,14 +30,14 @@ function assert(condition, message) {
 try {
   await cp(resolve(repositoryRoot, "tests/fixtures/eslint-broken"), workspace, { recursive: true });
   await writeFile(join(consumerRoot, "package.json"), '{"name":"code-inspection-consumer","private":true,"version":"1.0.0"}\n', "utf8");
-  const coreTarball = resolve(repositoryRoot, "artifacts/zakotoys-code-inspection-core-0.1.0.tgz");
-  const runtimeTarball = resolve(repositoryRoot, "artifacts/zakotoys-code-inspection-runtime-0.1.0.tgz");
+  const coreTarball = resolve(repositoryRoot, "artifacts/zakotoys-code-inspection-core-0.2.0.tgz");
+  const runtimeTarball = resolve(repositoryRoot, "artifacts/zakotoys-code-inspection-runtime-0.2.0.tgz");
   const install = await run(npmCommand, ["install", "--no-audit", "--no-fund", "--ignore-scripts", coreTarball, runtimeTarball, "eslint@10.10.0"]);
   assert(install.code === 0, `Consumer install failed: ${install.stderr}`);
   const env = { ...process.env, CODE_INSPECTION_DATA_DIR: dataDirectory, CODE_INSPECTION_IDLE_TIMEOUT_MS: "1000" };
   const trust = await run(cliCommand, ["trust", workspace], { env });
   assert(trust.code === 0, `Consumer trust failed: ${trust.stderr}`);
-  const inspect = await run(cliCommand, ["inspect", "--workspace", workspace, "--inspector", "eslint", "--json"], { env });
+  const inspect = await run(cliCommand, ["inspect", "--workspace", workspace, "--check", "eslint", "--json"], { env });
   assert(inspect.code === 1, `Consumer inspect returned ${inspect.code}: ${inspect.stderr}`);
   const runs = JSON.parse(inspect.stdout);
   assert(runs[0]?.summary?.errorCount === 3, "Consumer inspection did not report three ESLint errors.");

@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "checks": {
+    "golangci-lint": { "adapter": "golangci-lint", "enabled": true, "languages": ["go"], "scope": "project", "cwd": "." }
+  }
+}

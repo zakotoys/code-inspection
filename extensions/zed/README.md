@@ -1,6 +1,6 @@
 # Code Inspection for Zed
 
-The extension attaches the Code Inspection LSP to JavaScript, TypeScript, and TSX buffers. It uses the editor's `textDocument/didSave` notification, so it can run beside the existing JavaScript/TypeScript language server.
+The extension attaches the Code Inspection LSP to JavaScript, TypeScript, Python, Java, Go, Rust, C, and C++ buffers. It uses the editor's `textDocument/didSave` notification, so it can run beside each native language server.
 
 Install the runtime from the local core/runtime tarballs using the [repository quick start](../../README.md#quick-start-from-this-repository), then trust the workspace before enabling the extension:
 
@@ -23,7 +23,12 @@ The runtime executable must be available as `code-inspection-lsp` on Zed's PATH.
   "languages": {
     "JavaScript": { "language_servers": ["code-inspection", "..."] },
     "TypeScript": { "language_servers": ["code-inspection", "..."] },
-    "TSX": { "language_servers": ["code-inspection", "..."] }
+    "Python": { "language_servers": ["code-inspection", "..."] },
+    "Java": { "language_servers": ["code-inspection", "..."] },
+    "Go": { "language_servers": ["code-inspection", "..."] },
+    "Rust": { "language_servers": ["code-inspection", "..."] },
+    "C": { "language_servers": ["code-inspection", "..."] },
+    "C++": { "language_servers": ["code-inspection", "..."] }
   }
 }
 ```

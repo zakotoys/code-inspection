@@ -1,7 +1,22 @@
 import type { WorkspaceConfig } from "./config.js";
 
-export const INSPECTOR_IDS = ["eslint", "typescript", "build"] as const;
-export type InspectorId = (typeof INSPECTOR_IDS)[number];
+export const LANGUAGE_IDS = [
+  "javascript",
+  "typescript",
+  "python",
+  "java",
+  "go",
+  "rust",
+  "c",
+  "cpp"
+] as const;
+export type LanguageId = (typeof LANGUAGE_IDS)[number];
+
+export const CHECK_SCOPES = ["file", "project", "workspace"] as const;
+export type CheckScope = (typeof CHECK_SCOPES)[number];
+
+// Check IDs are configuration keys. The registry validates their adapter at runtime.
+export type CheckId = string;
 
 export const RUN_OUTCOMES = [
   "queued",
@@ -35,24 +50,37 @@ export interface InspectionScope {
 
 export interface InspectionRequest {
   runId: string;
-  inspector: InspectorId;
+  checkId: CheckId;
+  language?: LanguageId | undefined;
+  projectRoot?: string | undefined;
+  executionKey?: string | undefined;
   scope: InspectionScope;
   trigger: RunTrigger;
   generation: number;
 }
 
+export interface RelatedInformation {
+  message: string;
+  file?: string | undefined;
+  range?: Range | undefined;
+}
+
 export interface Finding {
   id: string;
-  inspector: InspectorId;
+  checkId: CheckId;
   source: string;
-  code?: string;
+  language?: LanguageId | undefined;
+  projectRoot?: string | undefined;
+  executionKey?: string | undefined;
+  code?: string | undefined;
   severity: FindingSeverity;
   message: string;
-  file?: string;
-  range?: Range;
+  file?: string | undefined;
+  range?: Range | undefined;
+  relatedInformation?: RelatedInformation[] | undefined;
   runId: string;
   generation: number;
-  stale?: boolean;
+  stale?: boolean | undefined;
 }
 
 export interface InspectionSummary {
@@ -61,9 +89,10 @@ export interface InspectionSummary {
   infoCount: number;
   hintCount: number;
   durationMs: number;
-  exitCode?: number;
-  stdout?: string;
-  stderr?: string;
+  exitCode?: number | undefined;
+  stdout?: string | undefined;
+  stderr?: string | undefined;
+  toolVersion?: string | undefined;
 }
 
 export interface InspectionOutput {
@@ -74,21 +103,24 @@ export interface InspectionOutput {
 export interface InspectionRun {
   runId: string;
   workspace: string;
-  inspector: InspectorId;
+  checkId: CheckId;
+  language?: LanguageId | undefined;
+  projectRoot?: string | undefined;
+  executionKey?: string | undefined;
   scope: InspectionScope;
   trigger: RunTrigger;
   generation: number;
-  startedAt?: string;
-  endedAt?: string;
+  startedAt?: string | undefined;
+  endedAt?: string | undefined;
   outcome: RunOutcome;
-  error?: InspectionErrorInfo;
-  summary?: InspectionSummary;
+  error?: InspectionErrorInfo | undefined;
+  summary?: InspectionSummary | undefined;
 }
 
 export interface InspectionErrorInfo {
   code: string;
   message: string;
-  details?: string;
+  details?: string | undefined;
 }
 
 export interface RunSnapshot {
@@ -107,12 +139,22 @@ export interface FindingsPage {
   offset: number;
   findings: Finding[];
   hasMore: boolean;
-  nextOffset?: number;
+  nextOffset?: number | undefined;
 }
 
 export interface InspectorContext {
   root: string;
   config: WorkspaceConfig;
+  logger: Logger;
+}
+
+export interface RawDiagnostic {
+  message: string;
+  severity?: FindingSeverity | undefined;
+  code?: string | undefined;
+  file?: string | undefined;
+  range?: Range | undefined;
+  relatedInformation?: RelatedInformation[] | undefined;
 }
 
 export interface Logger {

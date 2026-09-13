@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "checks": {
+    "typescript": {
+      "adapter": "typescript",
+      "enabled": true,
+      "languages": ["javascript", "typescript"],
+      "scope": "project",
+      "cwd": ".",
+      "project": "tsconfig.json"
+    }
+  }
+}

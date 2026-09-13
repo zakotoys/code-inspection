@@ -5,30 +5,40 @@ import { z } from "zod";
 import {
   canonicalizeWorkspaceRoot,
   formatError,
-  type Finding,
-  type InspectorId
+  LANGUAGE_IDS,
+  type Finding
 } from "@zakotoys/code-inspection-core";
 import { connectWorkspaceService, type WorkspaceClient } from "./ipc.js";
 import { createStderrLogger } from "./logger.js";
 
-const server = new McpServer({ name: "code-inspection-mcp-server", version: "0.1.0" });
+const server = new McpServer({ name: "code-inspection-mcp-server", version: "0.2.0" });
 const clients = new Map<string, WorkspaceClient>();
+const connecting = new Map<string, Promise<WorkspaceClient>>();
 const logger = createStderrLogger("mcp");
 
-const workspaceSchema = z.string().min(1).default(process.cwd()).describe("Workspace directory. It must be a local filesystem path.");
-const inspectorSchema = z.enum(["eslint", "typescript", "build"]).describe("Configured inspection to run.");
+// The VS Code provider supplies the active workspace through the environment;
+// standalone clients still inherit their current directory as the default.
+const defaultWorkspace = process.env.CODE_INSPECTION_WORKSPACE ?? process.cwd();
+const workspaceSchema = z.string().min(1).default(defaultWorkspace).describe("Workspace directory. It must be a local filesystem path.");
+const checkIdSchema = z.string().min(1).describe("Configured check ID. Use list_inspectors to discover IDs.");
+const languageSchema = z.enum(LANGUAGE_IDS).describe("Normalized language ID.");
 const formatSchema = z.enum(["json", "markdown"]).default("json").describe("Response format.");
 const positionSchema = z.object({ line: z.number().int().min(0), character: z.number().int().min(0) });
 const rangeSchema = z.object({ start: positionSchema, end: positionSchema });
+const relatedInformationSchema = z.object({ message: z.string(), file: z.string().optional(), range: rangeSchema.optional() });
 const findingSchema = z.object({
   id: z.string(),
-  inspector: inspectorSchema,
+  checkId: checkIdSchema,
   source: z.string(),
+  language: languageSchema.optional(),
+  projectRoot: z.string().optional(),
+  executionKey: z.string().optional(),
   code: z.string().optional(),
   severity: z.enum(["error", "warning", "info", "hint"]),
   message: z.string(),
   file: z.string().optional(),
   range: rangeSchema.optional(),
+  relatedInformation: z.array(relatedInformationSchema).optional(),
   runId: z.string(),
   generation: z.number().int(),
   stale: z.boolean().optional()
@@ -41,12 +51,16 @@ const summarySchema = z.object({
   durationMs: z.number().int().min(0),
   exitCode: z.number().int().optional(),
   stdout: z.string().optional(),
-  stderr: z.string().optional()
+  stderr: z.string().optional(),
+  toolVersion: z.string().optional()
 });
 const runSchema = z.object({
   runId: z.string(),
   workspace: z.string(),
-  inspector: inspectorSchema,
+  checkId: checkIdSchema,
+  language: languageSchema.optional(),
+  projectRoot: z.string().optional(),
+  executionKey: z.string().optional(),
   scope: z.object({ files: z.array(z.string()).optional() }),
   trigger: z.enum(["cli", "save", "manual", "mcp", "startup"]),
   generation: z.number().int(),
@@ -75,16 +89,18 @@ server.registerTool("run_inspection", {
   description: "Queue one configured workspace inspection and return its run record. Use get_run to wait for completion and get_findings to read normalized diagnostics. Execution requires that the workspace has been explicitly trusted locally.",
   inputSchema: z.object({
     workspace: workspaceSchema,
-    inspector: inspectorSchema,
+    check_id: checkIdSchema,
+    language: languageSchema.optional(),
+    project: z.string().min(1).optional(),
     files: z.array(z.string().min(1)).max(100).optional().describe("Optional workspace-relative files. TypeScript and build inspections may still check their full project."),
     response_format: formatSchema
   }).strict(),
   outputSchema: runSchema,
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
-}, async ({ workspace, inspector, files, response_format }) => {
+}, async ({ workspace, check_id, language, project, files, response_format }) => {
   try {
     const client = await getClient(workspace);
-    const response = await client.api.runInspection({ inspector: inspector as InspectorId, ...(files ? { scope: { files } } : {}), trigger: "mcp" });
+    const response = await client.api.runInspection({ checkId: check_id, ...(language ? { language } : {}), ...(project ? { project } : {}), ...(files ? { scope: { files } } : {}), trigger: "mcp" });
     return toolResult(response.run, "Inspection queued.", response_format);
   } catch (error) {
     return toolError(error);
@@ -116,7 +132,9 @@ server.registerTool("get_findings", {
   description: "Read the latest normalized findings from the shared workspace service. Results are paginated and identify stale results when a run failed or the inspected source changed.",
   inputSchema: z.object({
     workspace: workspaceSchema,
-    inspector: inspectorSchema.optional(),
+    check_id: checkIdSchema.optional(),
+    language: languageSchema.optional(),
+    project: z.string().min(1).optional(),
     file: z.string().min(1).optional().describe("Optional workspace-relative file filter."),
     offset: z.number().int().min(0).default(0),
     limit: z.number().int().min(1).max(500).default(50),
@@ -125,23 +143,75 @@ server.registerTool("get_findings", {
   }).strict(),
   outputSchema: z.object({ page: findingsPageSchema, runs: z.array(runSchema) }),
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
-}, async ({ workspace, inspector, file, offset, limit, include_stale, response_format }) => {
+}, async ({ workspace, check_id, language, project, file, offset, limit, include_stale, response_format }) => {
   try {
     const client = await getClient(workspace);
-    const response = await client.api.getFindings({ ...(inspector ? { inspector: inspector as InspectorId } : {}), ...(file ? { file } : {}), offset, limit, includeStale: include_stale });
+    const response = await client.api.getFindings({ ...(check_id ? { checkId: check_id } : {}), ...(language ? { language } : {}), ...(project ? { project } : {}), ...(file ? { file } : {}), offset, limit, includeStale: include_stale });
     return toolResult(response, formatFindings(response.page.findings), response_format);
   } catch (error) {
     return toolError(error);
   }
 });
 
+server.registerTool("list_inspectors", {
+  title: "List Inspection Capabilities",
+  description: "List the configured checks and supported languages for a workspace. This is read-only and never executes project tools.",
+  inputSchema: z.object({ workspace: workspaceSchema, include_disabled: z.boolean().default(true), response_format: formatSchema }).strict(),
+  outputSchema: z.object({ inspectors: z.array(z.object({ id: z.string(), adapter: z.string(), displayName: z.string(), enabled: z.boolean(), languages: z.array(languageSchema), scope: z.string(), supportsFileScope: z.boolean(), supportsCancellation: z.boolean(), supportsTimeout: z.boolean(), resourceGroup: z.string().optional(), projectMarkers: z.array(z.string()), configured: z.boolean() })), languages: z.array(z.object({ id: languageSchema, displayName: z.string(), extensions: z.array(z.string()) })) }),
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+}, async ({ workspace, include_disabled, response_format }) => {
+  try {
+    const client = await getClient(workspace);
+    const result = await client.api.listInspectors({ includeDisabled: include_disabled });
+    return toolResult(result, result.inspectors.map((item) => `${item.id}: ${item.enabled ? "enabled" : "disabled"} (${item.languages.join(",") || "workspace"})`).join("\n"), response_format);
+  } catch (error) { return toolError(error); }
+});
+
+server.registerTool("list_projects", {
+  title: "List Workspace Projects",
+  description: "Enumerate nested language projects detected under a workspace. This is read-only and never executes project tools.",
+  inputSchema: z.object({
+    workspace: workspaceSchema,
+    check_id: checkIdSchema.optional(),
+    language: languageSchema.optional(),
+    response_format: formatSchema
+  }).strict(),
+  outputSchema: z.object({ projects: z.array(z.object({ root: z.string(), language: languageSchema, marker: z.string().optional(), configuration: z.string().optional() })) }),
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+}, async ({ workspace, check_id, language, response_format }) => {
+  try {
+    const client = await getClient(workspace);
+    const result = await client.api.listProjects({ ...(check_id ? { checkId: check_id } : {}), ...(language ? { language } : {}) });
+    return toolResult(result, result.projects.map((project) => `${project.root} (${project.language})`).join("\n") || "No projects detected.", response_format);
+  } catch (error) { return toolError(error); }
+});
+
 async function getClient(inputWorkspace: string): Promise<WorkspaceClient> {
   const root = await canonicalizeWorkspaceRoot(inputWorkspace);
   const existing = clients.get(root);
-  if (existing) return existing;
-  const client = await connectWorkspaceService(root, logger);
-  clients.set(root, client);
-  return client;
+  if (existing) {
+    // A service owner can exit while this MCP process remains alive. The
+    // cached JSON-RPC connection then looks valid until its next request;
+    // probe it before handing it to a tool and reconnect once when stale.
+    try {
+      await existing.api.getStatus();
+      return existing;
+    } catch (error) {
+      logger.debug("Cached workspace service connection is stale; reconnecting", { root, error: formatError(error) });
+      existing.close();
+      if (clients.get(root) === existing) clients.delete(root);
+    }
+  }
+  const pending = connecting.get(root);
+  if (pending) return pending;
+  const connection = connectWorkspaceService(root, logger).then((client) => {
+    clients.set(root, client);
+    return client;
+  }).finally(() => {
+    if (connecting.get(root) === connection) connecting.delete(root);
+  });
+  connecting.set(root, connection);
+  return connection;
 }
 
 function toolResult(value: object, markdown: string, responseFormat: "json" | "markdown"): { content: [{ type: "text"; text: string }]; structuredContent: Record<string, unknown> } {
@@ -169,6 +239,7 @@ async function main(): Promise<void> {
 async function closeClients(): Promise<void> {
   for (const client of clients.values()) client.close();
   clients.clear();
+  connecting.clear();
   await server.close();
 }
 

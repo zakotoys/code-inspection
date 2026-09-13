@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "checks": {
+    "clang-tidy": { "adapter": "clang-tidy", "enabled": true, "languages": ["cpp"], "scope": "file", "cwd": "." }
+  }
+}

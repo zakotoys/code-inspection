@@ -1,20 +1,30 @@
 {
-  "version": 1,
-  "inspectors": {
+  "version": 2,
+  "checks": {
     "eslint": {
+      "adapter": "eslint",
       "enabled": false,
+      "languages": ["javascript", "typescript"],
+      "scope": "file",
       "cwd": ".",
       "patterns": ["**/*.ts"]
     },
     "typescript": {
+      "adapter": "typescript",
       "enabled": true,
+      "languages": ["javascript", "typescript"],
+      "scope": "project",
       "cwd": ".",
       "project": "tsconfig.json"
     },
     "build": {
+      "adapter": "command",
       "enabled": false,
+      "languages": [],
+      "scope": "workspace",
       "cwd": ".",
       "command": ["npm", "run", "build"],
+      "parser": "build",
       "timeoutMs": 120000
     }
   }

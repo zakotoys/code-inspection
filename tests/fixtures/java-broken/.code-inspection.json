@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "checks": {
+    "java-build": {
+      "adapter": "java-build",
+      "enabled": true,
+      "languages": ["java"],
+      "scope": "project",
+      "cwd": ".",
+      "command": ["javac", "src/Broken.java"],
+      "parser": "text"
+    }
+  }
+}

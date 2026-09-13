@@ -1,6 +1,6 @@
 # Code Inspection: Plan Overview
 
-Research date: 2026-09-08. Status: v0.1.0 implementation complete and locally distributable; public registry publication remains an external release action.
+Research date: 2026-09-08. Status: v0.1.0 implementation complete and locally distributable; public registry publication remains an external release action. The proposed multilingual follow-up is documented in [多语言代码检查扩展计划](multilingual-inspection-expansion.zh-CN.md).
 
 ## Starting Point
 

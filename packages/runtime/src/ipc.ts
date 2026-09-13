@@ -1,9 +1,10 @@
 import { realpathSync } from "node:fs";
-import { chmod, mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, connect, type Server, type Socket } from "node:net";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from "vscode-jsonrpc/node";
 import {
   canonicalizeWorkspaceRoot,
@@ -14,6 +15,17 @@ import {
 import {
   SERVICE_IDENTITY,
   SERVICE_PROTOCOL_VERSION,
+  parseCancelRunParams,
+  parseChangeParams,
+  parseDeleteParams,
+  parseGetFindingsParams,
+  parseGetRunParams,
+  parseGetStatusParams,
+  parseListInspectorsParams,
+  parseListProjectsParams,
+  parseRunInspectionParams,
+  parseSaveParams,
+  parseServiceHandshakeParams,
   type DiscoveryRecord,
   type ServiceHandshakeParams,
   type ServiceHandshakeResult,
@@ -23,7 +35,13 @@ import { createStderrLogger } from "./logger.js";
 
 const STARTUP_TIMEOUT_MS = 10_000;
 const RETRY_DELAY_MS = 100;
+const SOCKET_CONNECT_TIMEOUT_MS = 5_000;
 const UNIX_SOCKET_PATH_LIMIT = 100;
+// A newly spawned owner must remain available long enough for its parent
+// client to read discovery, open the socket, and complete the handshake. The
+// configured idle timeout applies after the first connection; using it during
+// startup makes small test/embedding timeouts race the owner initialization.
+const STARTUP_IDLE_GRACE_MS = 5_000;
 
 export interface WorkspaceClient {
   readonly root: string;
@@ -73,21 +91,36 @@ export async function startServiceOwner(rootInput: string, api: ServiceApi, logg
   const paths = discoveryPaths(root);
   const endpoint = suppliedEndpoint ?? paths.endpoint;
   const secret = suppliedSecret ?? randomBytes(32).toString("base64url");
+  const idleTimeoutMs = Number.isFinite(options.idleTimeoutMs) ? Math.max(0, options.idleTimeoutMs) : 30_000;
   const server = createServer();
   let closed = false;
-  const clients = new Set<MessageConnection>();
+  const clients = new Set<ConnectionWithSocket>();
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let hasAcceptedClient = false;
+  let listening = false;
+  const triggerIdle = (): void => {
+    if (closed) return;
+    try {
+      void Promise.resolve(options.onIdle()).catch((error: unknown) => logger.error("Workspace service idle callback failed", error));
+    } catch (error) {
+      logger.error("Workspace service idle callback failed", error);
+    }
+  };
   const scheduleIdle = (): void => {
-    if (clients.size > 0 || idleTimer) return;
+    if (closed || clients.size > 0 || idleTimer) return;
+    const idleTimeout = hasAcceptedClient
+      ? idleTimeoutMs
+      : Math.max(idleTimeoutMs, STARTUP_IDLE_GRACE_MS);
     idleTimer = setTimeout(() => {
       idleTimer = undefined;
       void api.getStatus().then((status) => {
-        if (clients.size === 0 && status.activeRuns.length === 0) void options.onIdle();
+        if (closed) return;
+        if (clients.size === 0 && status.activeRuns.length === 0) triggerIdle();
         else scheduleIdle();
       }).catch(() => {
-        if (clients.size === 0) void options.onIdle();
+        if (!closed && clients.size === 0) triggerIdle();
       });
-    }, options.idleTimeoutMs);
+    }, idleTimeout);
   };
   const clearIdle = (): void => {
     if (!idleTimer) return;
@@ -95,8 +128,9 @@ export async function startServiceOwner(rootInput: string, api: ServiceApi, logg
     idleTimer = undefined;
   };
   const onClient = (socket: Socket): void => {
+    hasAcceptedClient = true;
     const connection = createConnection(socket, socket, logger);
-    clients.add(connection.connection);
+    clients.add(connection);
     clearIdle();
     let authenticated = false;
     const handshakeTimer = setTimeout(() => {
@@ -106,7 +140,8 @@ export async function startServiceOwner(rootInput: string, api: ServiceApi, logg
       }
     }, 5_000);
     handshakeTimer.unref?.();
-    connection.connection.onRequest("initialize", async (params: ServiceHandshakeParams): Promise<ServiceHandshakeResult> => {
+    connection.connection.onRequest("initialize", async (rawParams: unknown): Promise<ServiceHandshakeResult> => {
+      const params = parseServiceHandshakeParams(rawParams);
       if (!params || params.root !== root || params.secret !== secret || params.protocolVersion !== SERVICE_PROTOCOL_VERSION || params.identity !== SERVICE_IDENTITY) {
         throw new Error("Workspace service handshake rejected: endpoint identity or secret is invalid.");
       }
@@ -114,17 +149,19 @@ export async function startServiceOwner(rootInput: string, api: ServiceApi, logg
       clearTimeout(handshakeTimer);
       return { root, protocolVersion: SERVICE_PROTOCOL_VERSION, identity: SERVICE_IDENTITY, pid: process.pid };
     });
-    for (const method of ["runInspection", "getRun", "getFindings", "cancelRun", "didSave", "didChange", "getStatus"] as const) {
+    for (const method of ["runInspection", "getRun", "getFindings", "cancelRun", "didSave", "didChange", "didDelete", "listInspectors", "listProjects", "getStatus"] as const) {
       connection.connection.onRequest(method, async (params: unknown) => {
         if (!authenticated) throw new Error("Workspace service handshake is required.");
+        if (method === "getStatus") return (api.getStatus as () => Promise<unknown>).call(api);
         const handler = api[method] as (value: unknown) => Promise<unknown>;
-        return handler.call(api, params);
+        const parsed = parseIpcRequest(method, params);
+        return handler.call(api, parsed);
       });
     }
     connection.connection.onClose(() => {
       clearTimeout(handshakeTimer);
-      clients.delete(connection.connection);
-      scheduleIdle();
+      clients.delete(connection);
+      if (!closed) scheduleIdle();
     });
     connection.connection.listen();
   };
@@ -135,24 +172,48 @@ export async function startServiceOwner(rootInput: string, api: ServiceApi, logg
     await mkdir(endpointDirectory, { recursive: true });
     await chmod(endpointDirectory, 0o700).catch((error: unknown) => logger.warn("Unable to restrict workspace socket directory permissions", error));
   }
-  await listen(server, endpoint);
-  if (process.platform !== "win32") await chmod(endpoint, 0o600).catch((error: unknown) => logger.warn("Unable to restrict workspace socket permissions", error));
-  await writeDiscovery(paths.discoveryPath, {
-    root,
-    endpoint,
-    secret,
-    pid: process.pid,
-    identity: SERVICE_IDENTITY,
-    protocolVersion: SERVICE_PROTOCOL_VERSION,
-    startedAt: new Date().toISOString()
-  });
-  scheduleIdle();
+  try {
+    await listen(server, endpoint);
+    listening = true;
+    if (process.platform !== "win32") await chmod(endpoint, 0o600).catch((error: unknown) => logger.warn("Unable to restrict workspace socket permissions", error));
+    await writeDiscovery(paths.discoveryPath, {
+      root,
+      endpoint,
+      secret,
+      pid: process.pid,
+      identity: SERVICE_IDENTITY,
+      protocolVersion: SERVICE_PROTOCOL_VERSION,
+      startedAt: new Date().toISOString()
+    });
+    scheduleIdle();
+  } catch (error) {
+    // A failed discovery write or listener setup must not leave a reachable
+    // endpoint that future clients could mistake for a healthy owner.
+    closed = true;
+    clearIdle();
+    for (const connection of clients) {
+      connection.connection.dispose();
+      connection.socket.destroy();
+    }
+    clients.clear();
+    await closeServer(server);
+    if (listening) await rm(endpoint, { force: true }).catch(() => undefined);
+    const current = await readDiscovery(paths.discoveryPath);
+    if (current?.pid === process.pid && current.secret === secret) await rm(paths.discoveryPath, { force: true });
+    throw error;
+  }
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
     clearIdle();
-    for (const connection of clients) connection.dispose();
-    await new Promise<void>((resolvePromise) => server.close(() => resolvePromise()));
+    for (const connection of clients) {
+      connection.connection.dispose();
+      // `MessageConnection.dispose()` removes protocol listeners but does not
+      // guarantee that a raw net.Socket is destroyed. Close both explicitly so
+      // server.close() cannot wait forever on an attached editor/agent.
+      connection.socket.destroy();
+    }
+    await closeServer(server);
     await rm(endpoint, { force: true }).catch(() => undefined);
     const current = await readDiscovery(paths.discoveryPath);
     if (current?.pid === process.pid && current.secret === secret) await rm(paths.discoveryPath, { force: true });
@@ -178,8 +239,27 @@ function createClientApi(connection: MessageConnection): ServiceApi {
     cancelRun: (params) => connection.sendRequest("cancelRun", params),
     didSave: (params) => connection.sendRequest("didSave", params),
     didChange: (params) => connection.sendRequest("didChange", params),
+    didDelete: (params) => connection.sendRequest("didDelete", params),
+    listInspectors: (params) => connection.sendRequest("listInspectors", params),
+    listProjects: (params) => connection.sendRequest("listProjects", params),
     getStatus: () => connection.sendRequest("getStatus")
   };
+}
+
+type IpcMethod = "runInspection" | "getRun" | "getFindings" | "cancelRun" | "didSave" | "didChange" | "didDelete" | "listInspectors" | "listProjects";
+
+function parseIpcRequest(method: IpcMethod, params: unknown): unknown {
+  switch (method) {
+    case "runInspection": return parseRunInspectionParams(params);
+    case "getRun": return parseGetRunParams(params);
+    case "getFindings": return parseGetFindingsParams(params);
+    case "cancelRun": return parseCancelRunParams(params);
+    case "didSave": return parseSaveParams(params);
+    case "didChange": return parseChangeParams(params);
+    case "didDelete": return parseDeleteParams(params);
+    case "listInspectors": return parseListInspectorsParams(params);
+    case "listProjects": return parseListProjectsParams(params);
+  }
 }
 
 async function tryConnect(record: DiscoveryRecord, root: string, logger: Logger): Promise<ConnectionWithSocket | undefined> {
@@ -239,9 +319,7 @@ async function startOwner(root: string, paths: ReturnType<typeof discoveryPaths>
     if (ownerState === "live-incompatible") {
       throw new Error("A live workspace service with an incompatible protocol is already running. Stop or update that service before retrying.");
     }
-    const entryPath = process.argv[1];
-    if (!entryPath) throw new Error("Unable to locate the runtime entry point for the workspace service.");
-    const serviceScript = join(dirname(realpathSync(entryPath)), "service-host.js");
+    const serviceScript = resolveServiceEntryPath();
     const { spawn } = await import("node:child_process");
     const child = spawn(process.execPath, [serviceScript, "--root", root, "--endpoint", paths.endpoint], {
       detached: true,
@@ -348,17 +426,42 @@ async function waitForDiscovery(discoveryPath: string, root: string): Promise<Di
 async function openSocket(endpoint: string): Promise<Socket> {
   return await new Promise<Socket>((resolvePromise, reject) => {
     const socket = connect(endpoint);
-    const onError = (error: Error): void => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      reject(new Error(`Timed out connecting to workspace service endpoint after ${SOCKET_CONNECT_TIMEOUT_MS}ms.`));
+    }, SOCKET_CONNECT_TIMEOUT_MS);
+    timeout.unref?.();
+    const cleanup = (): void => {
+      clearTimeout(timeout);
       socket.removeListener("connect", onConnect);
+      socket.removeListener("error", onError);
+      socket.removeListener("close", onClose);
+    };
+    const onError = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       socket.destroy();
       reject(error);
     };
     const onConnect = (): void => {
-      socket.removeListener("error", onError);
+      if (settled) return;
+      settled = true;
+      cleanup();
       resolvePromise(socket);
+    };
+    const onClose = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("Workspace service endpoint closed before connecting."));
     };
     socket.once("error", onError);
     socket.once("connect", onConnect);
+    socket.once("close", onClose);
   });
 }
 
@@ -395,8 +498,72 @@ async function readDiscovery(filePath: string): Promise<DiscoveryRecord | undefi
 
 async function writeDiscovery(filePath: string, record: DiscoveryRecord): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(record, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  if (process.platform !== "win32") await chmod(filePath, 0o600);
+  const temporaryPath = `${filePath}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(record, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    if (process.platform !== "win32") await chmod(temporaryPath, 0o600);
+    try {
+      await rename(temporaryPath, filePath);
+    } catch (error) {
+      // Windows does not replace an existing file with rename on all
+      // supported Node versions. The startup lock serializes this brief
+      // replacement window, so remove only the path we own and retry.
+      if (process.platform !== "win32" || !isNodeError(error) || !["EEXIST", "EPERM"].includes(error.code ?? "")) throw error;
+      await rm(filePath, { force: true });
+      await rename(temporaryPath, filePath);
+    }
+    if (process.platform !== "win32") await chmod(filePath, 0o600);
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
+function resolveServiceEntryPath(): string {
+  const explicit = process.env.CODE_INSPECTION_SERVICE_PATH;
+  const candidates: string[] = [];
+  if (explicit) candidates.push(explicit);
+  try {
+    const entry = fileURLToPath(import.meta.url);
+    candidates.push(join(dirname(entry), `service-host${runtimeEntryExtension(entry)}`));
+  } catch { /* CJS bundle path below. */ }
+  if (process.argv[1]) {
+    try {
+      const entry = realpathSync(process.argv[1]);
+      candidates.push(join(dirname(entry), `service-host${runtimeEntryExtension(entry)}`));
+    } catch { /* Try the package path below. */ }
+  }
+  const found = candidates.find((candidate) => {
+    try { return requireLikeExists(candidate); } catch { return false; }
+  });
+  if (!found) throw new Error("Unable to locate the runtime service-host entry point. Set CODE_INSPECTION_SERVICE_PATH or rebuild the runtime package.");
+  return found;
+}
+
+function runtimeEntryExtension(entry: string): ".cjs" | ".js" {
+  return extname(entry) === ".cjs" ? ".cjs" : ".js";
+}
+
+function requireLikeExists(path: string): boolean {
+  // Keep the existence check local to this module without introducing a
+  // synchronous import solely for a single startup branch.
+  try {
+    realpathSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolvePromise) => {
+    try {
+      server.close(() => resolvePromise());
+    } catch {
+      // `close` throws when listen failed or a previous shutdown already
+      // completed; either state is terminal for this owner.
+      resolvePromise();
+    }
+  });
 }
 
 function isDiscoveryRecord(value: unknown): value is DiscoveryRecord {

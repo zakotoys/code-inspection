@@ -1,16 +1,23 @@
 id = "code-inspection"
 name = "Code Inspection"
-description = "Save-triggered ESLint, TypeScript, and build diagnostics for JavaScript and TypeScript workspaces."
-version = "0.1.0"
+description = "Save-triggered multi-language diagnostics for local workspaces."
+version = "0.2.0"
 schema_version = 1
 authors = ["ZakoToys"]
 repository = "https://github.com/ZakoToys/code-inspection"
 
 [language_servers.code-inspection]
 name = "Code Inspection"
-languages = ["JavaScript", "TypeScript", "TSX"]
+languages = ["JavaScript", "JavaScript (Babel)", "TypeScript", "TSX", "Python", "Java", "Go", "Rust", "C", "C++"]
 
 [language_servers.code-inspection.language_ids]
 JavaScript = "javascript"
 TypeScript = "typescript"
 TSX = "typescriptreact"
+"JavaScript (Babel)" = "javascriptreact"
+Python = "python"
+Java = "java"
+Go = "go"
+Rust = "rust"
+C = "c"
+"C++" = "cpp"

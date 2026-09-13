@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "checks": {
+    "cargo-check": {
+      "adapter": "cargo-check",
+      "enabled": true,
+      "languages": ["rust"],
+      "scope": "project",
+      "cwd": "."
+    }
+  }
+}

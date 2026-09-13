@@ -10,4 +10,4 @@ const exitCode = await new Promise((resolvePromise, reject) => {
   child.once("close", (code) => resolvePromise(code ?? 1));
 });
 if (exitCode !== 0) process.exit(exitCode);
-await cp(resolve("extensions/zed/target/wasm32-wasip2/release/code_inspection_zed.wasm"), resolve("artifacts/code-inspection-zed-0.1.0.wasm"));
+await cp(resolve("extensions/zed/target/wasm32-wasip2/release/code_inspection_zed.wasm"), resolve("artifacts/code-inspection-zed-0.2.0.wasm"));

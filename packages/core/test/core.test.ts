@@ -26,8 +26,8 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
-function request(inspector: InspectionRequest["inspector"]): InspectionRequest {
-  return { runId: `test-${inspector}`, inspector, scope: {}, trigger: "cli", generation: 1 };
+function request(checkId: InspectionRequest["checkId"]): InspectionRequest {
+  return { runId: `test-${checkId}`, checkId, scope: {}, trigger: "cli", generation: 1 };
 }
 
 describe("inspection engine", () => {
@@ -88,7 +88,7 @@ describe("workspace paths and trust", () => {
   it("stores explicit trust outside the workspace and invalidates it after config changes", async () => {
     const dataDirectory = await temporaryDirectory("code-inspection-trust-");
     const workspace = await temporaryDirectory("code-inspection-trusted-workspace-");
-    await writeFile(join(workspace, ".code-inspection.json"), '{"version":1}\n', "utf8");
+    await writeFile(join(workspace, ".code-inspection.json"), '{"version":2}\n', "utf8");
     const root = await canonicalizeWorkspaceRoot(workspace);
     const store = new TrustStore(dataDirectory);
 
@@ -96,7 +96,7 @@ describe("workspace paths and trust", () => {
       expect(await store.isTrusted(root)).toBe(false);
       await store.grant(root);
       expect(await store.isTrusted(root)).toBe(true);
-      await writeFile(join(workspace, ".code-inspection.json"), '{"version":1,"debounceMs":500}\n', "utf8");
+      await writeFile(join(workspace, ".code-inspection.json"), '{"version":2,"debounceMs":500}\n', "utf8");
       expect(await store.isTrusted(root)).toBe(false);
       await store.revoke(root);
       expect(await store.isTrusted(root)).toBe(false);

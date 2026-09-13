@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "checks": {
+    "clang-build": {
+      "adapter": "clang-build",
+      "enabled": true,
+      "languages": ["c"],
+      "scope": "project",
+      "cwd": ".",
+      "command": ["clang", "-fsyntax-only", "-Wall", "main.c"],
+      "parser": "clang-json"
+    }
+  }
+}

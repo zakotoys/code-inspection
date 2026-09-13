@@ -1,6 +1,6 @@
 {
   "name": "@zakotoys/code-inspection",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Local code inspection, build diagnostics, MCP, and editor integrations.",
   "license": "Apache-2.0",
@@ -15,6 +15,9 @@
     "check": "npm run build && npm test",
     "smoke:lsp": "npm run build && node scripts/smoke-lsp.mjs",
     "smoke:mcp": "npm run build && node scripts/smoke-mcp.mjs",
+    "smoke:languages": "npm run build && node scripts/smoke-languages.mjs",
+    "smoke:lifecycle": "npm run build && node scripts/smoke-lifecycle.mjs",
+    "smoke:pressure": "npm run build && node scripts/smoke-pressure.mjs",
     "smoke:package": "node scripts/smoke-package.mjs",
     "package": "npm run build && npm run package:core && npm run package:runtime && npm run package:vscode && npm run package:zed",
     "package:core": "node scripts/prepare-artifacts.mjs && npm pack --workspace @zakotoys/code-inspection-core --pack-destination artifacts",

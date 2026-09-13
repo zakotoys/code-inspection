@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "checks": {
+    "checkstyle": {
+      "adapter": "checkstyle",
+      "enabled": true,
+      "languages": ["java"],
+      "scope": "project",
+      "cwd": "."
+    }
+  }
+}

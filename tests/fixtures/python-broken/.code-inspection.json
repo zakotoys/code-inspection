@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "checks": {
+    "ruff": {
+      "adapter": "ruff",
+      "enabled": true,
+      "languages": ["python"],
+      "scope": "file",
+      "cwd": ".",
+      "command": ["ruff", "check", "--output-format", "json"]
+    },
+    "pyright": {
+      "adapter": "pyright",
+      "enabled": false,
+      "languages": ["python"],
+      "scope": "project",
+      "cwd": "."
+    }
+  }
+}

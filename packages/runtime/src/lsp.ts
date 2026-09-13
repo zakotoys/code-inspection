@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import {
   createConnection,
   DiagnosticSeverity,
@@ -14,10 +15,10 @@ import {
 import { TextDocument } from "vscode-languageserver-textdocument";
 import {
   canonicalizeWorkspaceRoot,
+  LANGUAGE_IDS,
   TrustStore,
   type Finding,
-  type InspectionRun,
-  type InspectorId
+  type InspectionRun
 } from "@zakotoys/code-inspection-core";
 import { connectWorkspaceService, type WorkspaceClient } from "./ipc.js";
 import { createStderrLogger } from "./logger.js";
@@ -29,6 +30,32 @@ let client: WorkspaceClient | undefined;
 let root: string | undefined;
 let executionTrusted = false;
 const publishedUris = new Set<string>();
+// LSP notifications are asynchronous. Serialize publication so an older
+// snapshot cannot arrive after a newer save/change snapshot and overwrite it
+// in the editor.
+let publicationTail: Promise<void> = Promise.resolve();
+// Preserve the order in which the client delivered didChange/didSave/delete
+// notifications before making asynchronous IPC calls. Without this queue a
+// fast save could complete before the preceding change request and publish a
+// stale snapshot last.
+let documentEventTail: Promise<void> = Promise.resolve();
+
+const lspPath = z.string().min(1).max(4096);
+const lspRunSchema = z.object({
+  checkId: z.string().trim().min(1).max(128).optional(),
+  language: z.enum(LANGUAGE_IDS).optional(),
+  project: lspPath.optional(),
+  files: z.array(lspPath).max(100).optional()
+}).strict();
+const lspListSchema = z.object({ includeDisabled: z.boolean().optional() }).strict();
+const lspCancelSchema = z.object({ runId: lspPath }).strict();
+
+function parseLspRequest<T>(schema: z.ZodType<T>, value: unknown, operation: string): T {
+  const result = schema.safeParse(value === undefined ? {} : value);
+  if (result.success) return result.data;
+  const details = result.error.issues.map((issue) => `${issue.path.join(".") || "request"}: ${issue.message}`).join("; ");
+  throw new Error(`Invalid ${operation} request: ${details}`);
+}
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   root = await workspaceRoot(params);
@@ -48,9 +75,14 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
         openClose: true,
         change: TextDocumentSyncKind.Incremental,
         save: { includeText: false }
+      },
+      workspace: {
+        fileOperations: {
+          didDelete: { filters: [{ scheme: "file", pattern: { glob: "**/*", matches: "file" } }] }
+        }
       }
     },
-    serverInfo: { name: "code-inspection", version: "0.1.0" }
+    serverInfo: { name: "code-inspection", version: "0.2.0" }
   };
 });
 
@@ -61,27 +93,39 @@ connection.onNotification("codeInspection/trust", async () => {
 });
 
 connection.onNotification("initialized", () => {
-  void publishAll().catch((error) => logger.debug("Unable to publish existing findings", error));
+  void queuePublish().catch((error) => logger.debug("Unable to publish existing findings", error));
 });
 
 documents.onDidChangeContent((event) => {
-  void markChanged(event.document.uri);
+  void queueDocumentEvent(() => markChanged(event.document.uri));
 });
 
 documents.onDidSave((event) => {
-  void inspectSaved({ textDocument: { uri: event.document.uri } });
+  void queueDocumentEvent(() => inspectSaved({ textDocument: { uri: event.document.uri } }));
 });
 
-connection.onRequest("codeInspection/run", async (params: { inspector?: InspectorId; files?: string[] } = {}) => {
+connection.workspace.onDidDeleteFiles((event) => {
+  void queueDocumentEvent(() => handleDeletedFiles(event.files));
+});
+
+connection.onRequest("codeInspection/run", async (rawParams: unknown = {}) => {
   if (!executionTrusted) throw new Error("The workspace is untrusted. Trust it in the editor or with code-inspection trust before running project tools.");
+  const params = parseLspRequest(lspRunSchema, rawParams, "codeInspection/run");
   const activeClient = requireClient();
-  const inspector = params.inspector ?? "eslint";
-  const response = await activeClient.api.runInspection({ inspector, ...(params.files ? { scope: { files: params.files } } : {}), trigger: "manual" });
-  void waitForRun(response.run.runId).then(() => publishAll()).catch((error) => logger.error("Manual inspection failed", error));
+  const checkId = params.checkId ?? (await activeClient.api.listInspectors()).inspectors.find((item) => item.enabled)?.id;
+  if (!checkId) throw new Error("No enabled inspection check is configured in .code-inspection.json.");
+  const response = await activeClient.api.runInspection({ checkId, ...(params.language ? { language: params.language } : {}), ...(params.project ? { project: params.project } : {}), ...(params.files ? { scope: { files: params.files } } : {}), trigger: "manual" });
+  void waitForRun(response.run.runId).then(() => queuePublish()).catch((error) => logger.error("Manual inspection failed", error));
   return response.run;
 });
 
-connection.onRequest("codeInspection/cancel", async (params: { runId: string }) => {
+connection.onRequest("codeInspection/listInspectors", async (rawParams: unknown = {}) => {
+  const params = parseLspRequest(lspListSchema, rawParams, "codeInspection/listInspectors");
+  return requireClient().api.listInspectors(params);
+});
+
+connection.onRequest("codeInspection/cancel", async (rawParams: unknown) => {
+  const params = parseLspRequest(lspCancelSchema, rawParams, "codeInspection/cancel");
   return requireClient().api.cancelRun({ runId: params.runId });
 });
 
@@ -98,7 +142,7 @@ async function inspectSaved(event: DidSaveTextDocumentParams): Promise<void> {
     for (const run of response.runs) {
       await waitForRun(run.runId);
     }
-    await publishAll();
+    await queuePublish();
   } catch (error) {
     logger.error("Save inspection failed", error);
     const uri = event.textDocument.uri;
@@ -110,8 +154,25 @@ async function markChanged(uri: string): Promise<void> {
   try {
     const activeClient = requireClient();
     await activeClient.api.didChange({ file: fileURLToPath(uri) });
+    // didChange marks the prior result stale immediately. Publish that state
+    // instead of leaving the editor showing a result that no longer matches
+    // the in-memory document until the next save completes.
+    await queuePublish();
   } catch (error) {
     logger.debug("Unable to mark dirty file", error);
+  }
+}
+
+async function handleDeletedFiles(files: Array<{ uri: string }>): Promise<void> {
+  try {
+    const activeClient = requireClient();
+    for (const { uri } of files) {
+      if (!uri.startsWith("file:")) continue;
+      await activeClient.api.didDelete({ file: fileURLToPath(uri) });
+    }
+    await queuePublish();
+  } catch (error) {
+    logger.debug("Unable to clear deleted file findings", error);
   }
 }
 
@@ -140,6 +201,22 @@ async function publishAll(): Promise<void> {
   }
 }
 
+function queuePublish(): Promise<void> {
+  const next = publicationTail.then(() => publishAll(), () => publishAll());
+  publicationTail = next.catch((error) => {
+    logger.debug("Unable to publish diagnostics", error);
+  });
+  return next;
+}
+
+function queueDocumentEvent(task: () => Promise<void>): Promise<void> {
+  const next = documentEventTail.then(task, task);
+  documentEventTail = next.catch((error) => {
+    logger.debug("Unable to process document event", error);
+  });
+  return next;
+}
+
 async function waitForRun(runId: string): Promise<InspectionRun> {
   const activeClient = requireClient();
   for (;;) {
@@ -157,12 +234,25 @@ function toDiagnostic(finding: Finding): Diagnostic {
     range: finding.range ?? fullDocumentRange(finding.file ?? ""),
     message: finding.stale ? `[stale] ${finding.message}` : finding.message,
     source: `code-inspection/${finding.source}`,
-    ...(finding.code ? { code: finding.code } : {})
+    ...(finding.code ? { code: finding.code } : {}),
+    ...(finding.relatedInformation
+      ? {
+          relatedInformation: finding.relatedInformation.flatMap((related) => {
+            if (!related.file || !related.range) return [];
+            return [{
+              location: { uri: related.file, range: related.range },
+              message: related.message
+            }];
+          })
+        }
+      : {})
   };
 }
 
-function fullDocumentRange(_uri: string): { start: { line: number; character: number }; end: { line: number; character: number } } {
-  return { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } };
+function fullDocumentRange(uri: string): { start: { line: number; character: number }; end: { line: number; character: number } } {
+  const document = uri ? documents.get(uri) : undefined;
+  if (!document) return { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+  return { start: { line: 0, character: 0 }, end: document.positionAt(document.getText().length) };
 }
 
 async function workspaceRoot(params: InitializeParams): Promise<string> {
@@ -177,7 +267,9 @@ function requireClient(): WorkspaceClient {
 
 function trustedInitialization(value: unknown): boolean | undefined {
   if (typeof value !== "object" || value === null || !("trusted" in value)) return undefined;
-  return value.trusted === true;
+  const trusted = value.trusted;
+  if (typeof trusted !== "boolean") throw new Error("Invalid initializationOptions.trusted: expected a boolean.");
+  return trusted;
 }
 
 documents.listen(connection);
