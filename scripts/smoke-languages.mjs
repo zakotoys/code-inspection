@@ -70,7 +70,7 @@ function failureText(result) {
   try {
     const runs = JSON.parse(result.stdout);
     const error = runs.find((run) => run.error)?.error;
-    if (error) return `${error.code}: ${error.message}`;
+    if (error) return [error.code + ": " + error.message, error.details].filter(Boolean).join("\n");
     if (Array.isArray(runs) && runs.length > 0) return `run outcomes: ${runs.map((run) => `${run.checkId ?? "unknown"}=${run.outcome ?? "unknown"}`).join(", ")}`;
   } catch { /* keep the generic status below */ }
   if (result.stderr.trim()) return result.stderr.trim();
