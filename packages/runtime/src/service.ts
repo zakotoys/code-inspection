@@ -64,7 +64,7 @@ import {
   parseRunInspectionParams,
   parseSaveParams
 } from "./protocol.js";
-import { watchWorkspace, type WorkspaceWatcher } from "./workspace-watcher.js";
+import { isIgnoredWorkspacePath, watchWorkspace, type WorkspaceWatcher } from "./workspace-watcher.js";
 import { canFallbackToInProcessWorker, runInspectionWorker } from "./worker-executor.js";
 
 interface PreparedRequest {
@@ -760,7 +760,7 @@ export class WorkspaceService implements ServiceApi {
         this.invalidateAllRuns();
         return;
       }
-      if (isIgnoredExternalPath(relativeFile)) return;
+      if (isIgnoredWorkspacePath(relativeFile)) return;
       let exists = true;
       try {
         const stats = statSync(resolve(this.root, relativeFile));
@@ -995,27 +995,6 @@ function isPathWithin(parent: string, candidate: string): boolean {
   const parentKey = process.platform === "win32" ? parentPath.toLowerCase() : parentPath;
   const candidateKey = process.platform === "win32" ? candidatePath.toLowerCase() : candidatePath;
   return candidateKey === parentKey || candidateKey.startsWith(parentKey + (process.platform === "win32" ? "\\" : "/"));
-}
-
-function isIgnoredExternalPath(file: string): boolean {
-  const segments = file.replaceAll("\\", "/").split("/").filter(Boolean).map((segment) => segment.toLowerCase());
-  const ignoredDirectories = new Set([
-    ".git", "node_modules", "dist", "coverage", "target", ".cache", ".next", "out", "build",
-    ".ruff_cache", ".pytest_cache", ".mypy_cache", "__pycache__", ".gradle", ".idea", ".venv", "venv",
-    ".tox", ".hypothesis", ".cargo", "bazel-out", "cmake-build-debug", "cmake-build-release"
-  ]);
-  const ignoredFiles = new Set([
-    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "go.sum",
-    "cargo.lock", "composer.lock", ".ds_store"
-  ]);
-  const ignoredExtensions = new Set([
-    ".class", ".pyc", ".pyo", ".o", ".obj", ".a", ".so", ".dylib", ".dll", ".exe", ".pdb", ".ilk"
-  ]);
-  const basename = segments[segments.length - 1] ?? "";
-  const extension = basename.includes(".") ? basename.slice(basename.lastIndexOf(".")).toLowerCase() : "";
-  return segments.some((segment) => ignoredDirectories.has(segment))
-    || (segments.length > 0 && ignoredFiles.has(basename))
-    || ignoredExtensions.has(extension);
 }
 
 function isInitialWatcherEvent(root: string, watchedFile: string | undefined, watcherStartedAt: number): boolean {

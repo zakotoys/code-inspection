@@ -67,12 +67,13 @@ function findingCount(result) {
 }
 
 function failureText(result) {
-  if (result.stderr.trim()) return result.stderr.trim();
   try {
     const runs = JSON.parse(result.stdout);
     const error = runs.find((run) => run.error)?.error;
     if (error) return `${error.code}: ${error.message}`;
+    if (Array.isArray(runs) && runs.length > 0) return `run outcomes: ${runs.map((run) => `${run.checkId ?? "unknown"}=${run.outcome ?? "unknown"}`).join(", ")}`;
   } catch { /* keep the generic status below */ }
+  if (result.stderr.trim()) return result.stderr.trim();
   return `exit ${result.code}`;
 }
 
@@ -113,18 +114,18 @@ try {
     const env = { CODE_INSPECTION_DATA_DIR: fixtureState, CODE_INSPECTION_IDLE_TIMEOUT_MS: "1000" };
     const clean = await runCli(item.clean, item.check, env);
     if (clean.code === 2) {
-      if (strict) throw new Error(`${item.language} clean inspection failed: ${clean.stderr}`);
+      if (strict) throw new Error(`${item.language} clean inspection failed: ${failureText(clean)}`);
       process.stdout.write(`SKIP ${item.language}: ${failureText(clean)}\n`);
       continue;
     }
-    assert(clean.code === 0, `${item.language} clean fixture returned ${clean.code}: ${clean.stderr}`);
+    assert(clean.code === 0, `${item.language} clean fixture returned ${clean.code}: ${failureText(clean)}`);
     const broken = await runCli(item.broken, item.check, env);
     if (broken.code === 2) {
-      if (strict) throw new Error(`${item.language} broken inspection failed: ${broken.stderr}`);
+      if (strict) throw new Error(`${item.language} broken inspection failed: ${failureText(broken)}`);
       process.stdout.write(`SKIP ${item.language}: ${failureText(broken)}\n`);
       continue;
     }
-    assert(broken.code === 1, `${item.language} broken fixture returned ${broken.code}: ${broken.stderr}`);
+    assert(broken.code === 1, `${item.language} broken fixture returned ${broken.code}: ${failureText(broken)}`);
     const count = findingCount(broken);
     assert(count > 0, `${item.language} broken fixture produced no findings.`);
     process.stdout.write(`PASS ${item.language}: clean=0, broken=${count}\n`);

@@ -2,6 +2,19 @@ import { lstat, readdir, stat } from "node:fs/promises";
 import { watch, type FSWatcher } from "node:fs";
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
+const IGNORED_DIRECTORIES = new Set([
+  ".git", "node_modules", "dist", "coverage", "target", "build", "out", ".cache", ".next",
+  ".ruff_cache", ".pytest_cache", ".mypy_cache", "__pycache__", ".gradle", ".idea", ".venv", "venv",
+  ".tox", ".hypothesis", ".cargo", "bazel-out", "cmake-build-debug", "cmake-build-release"
+]);
+const IGNORED_FILES = new Set([
+  "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "go.sum",
+  "cargo.lock", "composer.lock", ".ds_store"
+]);
+const IGNORED_EXTENSIONS = new Set([
+  ".class", ".pyc", ".pyo", ".o", ".obj", ".a", ".so", ".dylib", ".dll", ".exe", ".pdb", ".ilk"
+]);
+
 export interface WorkspaceWatcher {
   close(): void;
 }
@@ -45,11 +58,7 @@ export async function watchWorkspace(rootInput: string, options: WorkspaceWatche
 
   const shouldSkipDirectory = (directory: string): boolean => {
     const segments = relative(root, directory).replaceAll("\\", "/").split("/").filter(Boolean).map((segment) => segment.toLowerCase());
-    return segments.some((segment) => [
-      ".git", "node_modules", "dist", "coverage", "target", "build", "out", ".cache", ".next",
-      ".ruff_cache", ".pytest_cache", ".mypy_cache", "__pycache__", ".gradle", ".idea", ".venv", "venv",
-      ".tox", ".hypothesis", ".cargo", "bazel-out", "cmake-build-debug", "cmake-build-release"
-    ].includes(segment));
+    return segments.some(isIgnoredDirectorySegment);
   };
 
   const removeSubtree = (directory: string): void => {
@@ -153,6 +162,21 @@ export async function watchWorkspace(rootInput: string, options: WorkspaceWatche
       recentEvents.clear();
     }
   };
+}
+
+export function isIgnoredWorkspacePath(file: string): boolean {
+  const segments = file.replaceAll("\\", "/").split("/").filter(Boolean).map((segment) => segment.toLowerCase());
+  const filename = segments[segments.length - 1] ?? "";
+  const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".")) : "";
+  return segments.some(isIgnoredDirectorySegment)
+    || IGNORED_FILES.has(filename)
+    || IGNORED_EXTENSIONS.has(extension);
+}
+
+function isIgnoredDirectorySegment(segment: string): boolean {
+  // Cargo atomically creates its default output directory through a sibling
+  // named `target` plus a six-character tempfile suffix.
+  return IGNORED_DIRECTORIES.has(segment) || /^target[a-z0-9]{6}$/.test(segment);
 }
 
 function normalizeDirectory(value: string): string {

@@ -374,7 +374,7 @@ describe("workspace service", () => {
     await writeFile(join(rootPath, ".code-inspection.json"), JSON.stringify({ version: 2, checks: {
       build: {
         adapter: "command", enabled: true, languages: [], scope: "workspace", cwd: ".",
-        command: [process.execPath, "-e", "require('node:fs').mkdirSync('target', { recursive: true }); setTimeout(() => {}, 300)"],
+        command: [process.execPath, "-e", "const fs = require('node:fs'); fs.mkdirSync('targetAb3Xy9'); fs.renameSync('targetAb3Xy9', 'target'); setTimeout(() => {}, 300)"],
         parser: "build", timeoutMs: 2000
       }
     } }), "utf8");
