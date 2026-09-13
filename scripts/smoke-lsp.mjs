@@ -49,8 +49,8 @@ try {
       workspaceFolders: [{ uri: workspaceUri, name: "fixture" }]
     });
     assert.equal(initialized.capabilities.textDocumentSync.change, 2);
-    connection.sendNotification("initialized", {});
-    connection.sendNotification("textDocument/didOpen", {
+    await connection.sendNotification("initialized", {});
+    await connection.sendNotification("textDocument/didOpen", {
       textDocument: {
         uri: fileUri,
         languageId,
@@ -59,7 +59,7 @@ try {
       }
     });
     saveSent = true;
-    connection.sendNotification("textDocument/didSave", { textDocument: { uri: fileUri } });
+    await connection.sendNotification("textDocument/didSave", { textDocument: { uri: fileUri } });
     const result = await waitForDiagnostics((params) => saveSent && params.uri === fileUri && params.diagnostics.length === expected);
     assert.equal(result.diagnostics.length, expected, `Expected ${expected} diagnostics, not a service error.`);
     for (const diagnostic of result.diagnostics) {
@@ -73,7 +73,7 @@ try {
       const staleDiagnostics = waitForDiagnostics((params) => params.uri === fileUri
         && params.diagnostics.length === expected
         && params.diagnostics.every((diagnostic) => String(diagnostic.message).startsWith("[stale] ")));
-      connection.sendNotification("textDocument/didChange", {
+      await connection.sendNotification("textDocument/didChange", {
         textDocument: { uri: fileUri, version: 2 },
         contentChanges: [{ text: changedText }]
       });
@@ -82,7 +82,7 @@ try {
     }
     process.stdout.write(`LSP smoke passed: ${result.diagnostics.length} diagnostic(s) for ${process.env.SMOKE_CHECK_ID ?? "configured checks"}.\n`);
     await connection.sendRequest("shutdown");
-    connection.sendNotification("exit");
+    await connection.sendNotification("exit");
   }, 15_000, "LSP smoke");
 } finally {
   connection.dispose();
