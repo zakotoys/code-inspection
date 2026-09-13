@@ -2,11 +2,11 @@
 
 计划日期：2026-09-13
 最后验证：2026-09-14
-状态：v0.2.0 代码实现、本机工具矩阵、生命周期/压力、打包及 VS Code/Zed 真实宿主验收完成；发布技术门禁仅剩远端 Windows/macOS/Linux CI
+状态：v0.2.0 代码实现及全部技术门禁已完成；仅剩发布签核
 目标版本：v0.2.0
 前置版本：v0.1.0
 
-实现状态：阶段 0–6 的代码路径已经落地，包括八种语言目录、v2 配置/协议、注册表、项目发现、Tool Runner、结构化解析器、内置检查器、项目级调度、递归 watcher、worker 隔离、动态 IPC/MCP/LSP/CLI、编辑器语言选择器、CI 工具矩阵和发布 smoke。当前本机代码、固定工具矩阵、生命周期/压力回归、打包以及 VS Code/Zed 八语言宿主门禁均已通过；远端三平台 CI 尚未实际执行，具体证据要求在第 15 节列出。
+实现状态：阶段 0–6 的代码路径已经落地，包括八种语言目录、v2 配置/协议、注册表、项目发现、Tool Runner、结构化解析器、内置检查器、项目级调度、递归 watcher、worker 隔离、动态 IPC/MCP/LSP/CLI、编辑器语言选择器、CI 工具矩阵和发布 smoke。本机代码、固定工具矩阵、生命周期/压力回归、打包、VS Code/Zed 八语言宿主门禁以及远端 Windows/macOS/Linux CI 均已通过；远端验收证据为 [GitHub Actions run 34773982868](https://github.com/zakotoys/code-inspection/actions/runs/34773982868)。
 
 ## 1. 目标
 
@@ -275,11 +275,11 @@ Runtime 默认在独立 `worker_threads` 中执行每次检查，并对 worker �
 | --- | --- | --- | --- |
 | 0. 注册表和 v2 基础 | Language Catalog、Inspector Registry、ProjectContext、配置 v2、协议 v2；拆分现有 engine；更新 CLI/MCP/LSP 类型 | 现有 ESLint/TypeScript/build 的 CLI、LSP、MCP 流程全部通过；v1 明确拒绝 | 已完成 |
 | 1. 通用命令层 | Tool Runner、JSON/SARIF/XML parser 接口、项目级调度、进程组取消 | 缺工具、超时、取消、输出上限、Unicode 位置和 stale 结果测试通过 | 已完成 |
-| 2. Python/Go/Rust | Ruff、Pyright、go vet、cargo check；各自 Project Locator 和 fixtures | 三种语言均能 CLI 检查、MCP 查询、LSP 保存触发和修复后清除 | 已完成；固定工具矩阵 strict smoke 已通过，远端跨平台 CI 待执行 |
-| 3. Java | Maven/Gradle wrapper、Checkstyle、PMD、编译诊断 parser | Maven 和 Gradle fixture 都能报告文件位置；无构建配置时返回明确错误 | 已完成；Maven/Gradle 固定版本 strict smoke 已通过，远端跨平台 CI 待执行 |
-| 4. C/C++ | compile database、clang/clang-tidy、C/C++ 语言分类和 parser | `clang-tidy` 使用 compile database；`clang-build` 使用显式命令；C 与 C++ fixture 均能解析编译/静态检查结果，缺少必要配置时不误报 | 已完成；clang/clang-tidy 固定版本 strict smoke 已通过，远端跨平台 CI 待执行 |
-| 5. 客户端和发布 | 动态 MCP discovery、VS Code/Zed selector、CLI capability 命令、打包和文档 | 所有入口看到同一结果；三平台 CI、安装包 smoke 和编辑器保存流程通过 | 功能、打包及真实 VS Code/Zed 保存流程已完成；远端三平台门禁待执行 |
-| 6. 加固 | 旧路径清理、worker 隔离、性能和进程树清理、工具版本矩阵 | 无遗留固定 inspector 分支；并发、崩溃恢复和退出清理达到发布标准 | 基础实现已完成；跨平台/压力矩阵待 CI |
+| 2. Python/Go/Rust | Ruff、Pyright、go vet、cargo check；各自 Project Locator 和 fixtures | 三种语言均能 CLI 检查、MCP 查询、LSP 保存触发和修复后清除 | 已完成；固定工具矩阵 strict smoke 和远端 CI 已通过 |
+| 3. Java | Maven/Gradle wrapper、Checkstyle、PMD、编译诊断 parser | Maven 和 Gradle fixture 都能报告文件位置；无构建配置时返回明确错误 | 已完成；Maven/Gradle 固定版本 strict smoke 和远端 CI 已通过 |
+| 4. C/C++ | compile database、clang/clang-tidy、C/C++ 语言分类和 parser | `clang-tidy` 使用 compile database；`clang-build` 使用显式命令；C 与 C++ fixture 均能解析编译/静态检查结果，缺少必要配置时不误报 | 已完成；clang/clang-tidy 固定版本 strict smoke 和远端 CI 已通过 |
+| 5. 客户端和发布 | 动态 MCP discovery、VS Code/Zed selector、CLI capability 命令、打包和文档 | 所有入口看到同一结果；三平台 CI、安装包 smoke 和编辑器保存流程通过 | 已完成；功能、打包、真实 VS Code/Zed 保存流程和远端三平台门禁均已通过 |
+| 6. 加固 | 旧路径清理、worker 隔离、性能和进程树清理、工具版本矩阵 | 无遗留固定 inspector 分支；并发、崩溃恢复和退出清理达到发布标准 | 已完成；跨平台生命周期、压力和工具矩阵均已通过 |
 
 建议优先实现 Python、Go、Rust，再实现 Java 和 C/C++。前三者的机器可读输出和项目边界更稳定；Java 的构建生态和 C/C++ 的编译数据库需要更多项目级前提。
 
@@ -329,7 +329,7 @@ Runtime 默认在独立 `worker_threads` 中执行每次检查，并对 worker �
 
 ## 13. 完成定义
 
-代码实现已经完成；当以下发布门禁全部满足时，v0.2.0 多语言扩展才算可发布：
+代码实现和技术门禁已经完成；以下条件均已满足，v0.2.0 多语言扩展可以进入发布签核：
 
 - Python、Java、Go、Rust、C、C++ 均能通过统一 finding 合约返回诊断；
 - 同一工作区的 CLI、编辑器和 Agent 查询到同一份最新结果；
@@ -351,7 +351,7 @@ Runtime 默认在独立 `worker_threads` 中执行每次检查，并对 worker �
 | 内置检查器 | ESLint、TypeScript、Ruff、Pyright、go vet、golangci-lint、Cargo check/clippy、Checkstyle、PMD、Java build、clang-tidy、Clang build、通用 command |
 | 统一协议 | 服务协议 v2；CLI、LSP、MCP 共用 `checkId + projectRoot + scope` 结果集；旧 v1 配置/握手和字段别名直接拒绝 |
 | 测试 | Core 58 项、Runtime 32 项；包含 parser golden、Maven 编译文本、Unicode/符号链接位置、取消/超时、stale、删除文件、项目发现、跨项目拒绝、watcher、协议边界、真实 IPC 无参 `getStatus`、并发边界、服务销毁竞态、查询过滤、失败运行可见性和 worker 崩溃恢复 |
-| 进程级验证 | LSP smoke、MCP smoke、八种语言 CLI/protocol smoke（本机可用工具）和 npm 消费者安装 smoke 均通过；完整固定工具矩阵的 CLI strict smoke、生命周期 smoke 和压力 smoke 已通过 |
+| 进程级验证 | LSP smoke、MCP smoke、八种语言 CLI/protocol smoke、npm 消费者安装 smoke、生命周期 smoke 和压力 smoke 均通过；CI 固定工具矩阵的 14 组 clean/broken CLI/MCP/LSP strict smoke 全部通过 |
 | 发布产物 | Core/runtime npm tarball、VSIX、Zed WASM 均已生成并通过本机打包命令 |
 | 编辑器宿主 | VS Code 1.119.0 与 Zed Preview 1.20.0 均完成八语言错误态、MCP 一致性、修复清除和原生语言服务共存验收；退出后无残留 LSP、service、socket 或 discovery |
 
@@ -391,9 +391,11 @@ npm run package:zed
 git diff --check
 ```
 
-本机默认 PATH 未提供 `pyright`、`golangci-lint`、Maven、Gradle 和 `clang-tidy`，已通过临时工具目录及 Homebrew LLVM 完成完整 strict CLI + MCP/LSP smoke：Ruff 0.15.1、Pyright 1.1.405、golangci-lint 2.1.6、Maven 3.9.9、Gradle 8.10.2、Go 1.26.3、Cargo 1.90.0、JDK 17.0.12、LLVM 20.1.8。覆盖所有 clean/broken 输出；缺工具行为也有独立覆盖。本轮还验证了服务销毁竞态、项目配置文件筛选、跨嵌套项目拒绝、预取消 worker、递归 watcher 并发注册保护、VS Code server 并发准备锁、Unicode/空格路径下的超时与取消进程树清理，以及 2 槽并发、build 资源组串行、100 项队列上限、dispose 清理和 worker 崩溃恢复。仓库 CI 的 `language-tools` job 在 Ubuntu 固定 Ruff、Pyright、JDK、Maven、Gradle、Go、golangci-lint、Rust、LLVM 版本；Node job 在 Windows/macOS/Linux 重复生命周期、协议和打包 smoke。CI 尚未实际执行，三平台完整语言工具矩阵仍属于发布门禁。
+本机默认 PATH 未提供 `pyright`、`golangci-lint`、Maven、Gradle 和 `clang-tidy`，已通过临时工具目录及 Homebrew LLVM 完成完整 strict CLI + MCP/LSP smoke：Ruff 0.15.1、Pyright 1.1.405、golangci-lint 2.1.6、Maven 3.9.9、Gradle 8.10.2、Go 1.26.3、Cargo 1.90.0、JDK 17.0.12、LLVM 20.1.8。覆盖所有 clean/broken 输出；缺工具行为也有独立覆盖。本轮还验证了服务销毁竞态、项目配置文件筛选、跨嵌套项目拒绝、预取消 worker、递归 watcher 并发注册保护、VS Code server 并发准备锁、Unicode/空格路径下的超时与取消进程树清理，以及 2 槽并发、build 资源组串行、100 项队列上限、dispose 清理和 worker 崩溃恢复。
 
-发布技术门禁仅剩：远端 Windows/macOS/Linux 的路径与进程生命周期矩阵，以及 CI 固定工具矩阵的实际成功记录。CI 通过后再执行发布签核。本机已经完成全局并发、资源组串行、队列上限、worker 崩溃恢复、退出清理和真实 VS Code/Zed 宿主验收；远端将重复自动化命令，作为跨平台证据补充。这些剩余项是发布门禁的环境验证，不改变已经落地的 v2 配置和协议模型。
+远端 [GitHub Actions run 34773982868](https://github.com/zakotoys/code-inspection/actions/runs/34773982868) 已成功完成全部 6 个 job：Windows、macOS、Linux Node 任务均通过类型检查、Core 58 项、Runtime 32 项、协议、生命周期、压力、npm 包消费 smoke；VSIX 和 Zed WASM 打包成功。Ubuntu `language-tools` job 使用 Ruff 0.13.1、Pyright 1.1.405、Go 1.24.1、golangci-lint 2.1.6、Cargo 1.85.0、JDK 21.0.12.1、Maven 3.9.9、Gradle 8.10.2 和 LLVM 20.1.8，14 组 clean/broken CLI/MCP/LSP strict smoke 全部通过。
+
+发布技术门禁已全部通过。当前仅剩发布签核：审阅变更日志、工具最低版本、信任说明和最终包内容，并由发布负责人确认 registry 上传。
 
 ## 15. 发布前执行清单
 
@@ -406,10 +408,10 @@ git diff --check
 | 已完成 | 生命周期与进程清理 smoke | `npm run smoke:lifecycle` | Unicode/空格路径、超时、取消、后代进程、符号链接越界和 idle discovery 清理通过 |
 | 已完成 | 并发与 worker 恢复压力 smoke | `npm run smoke:pressure` | 全局并发不超过 2；build 资源组串行；队列不超过 100；dispose 和 worker 崩溃恢复通过 |
 | 已完成 | 本机打包消费 | `npm run package:core`、`npm run package:runtime`、`npm run smoke:package`、`npm run package:vscode`、`npm run package:zed` | npm tarball、VSIX、Zed WASM 可生成并被临时消费者加载 |
-| 本机已完成；CI 待执行 | 固定工具矩阵 | 本机临时工具目录运行 `STRICT_LANGUAGE_SMOKE=1 LANGUAGE_SMOKE_PROTOCOLS=1 node scripts/smoke-languages.mjs`；CI 再安装并固定 Ruff、Pyright、JDK/Maven/Gradle、Go/golangci-lint、Rust、LLVM | 本机八种语言 clean/broken、CLI/MCP/LSP 全部通过并记录版本；待 CI 链接作为跨平台证据 |
-| 待执行 | 三平台路径与进程树 | Windows、macOS、Linux CI；包含空格/非 ASCII 路径、符号链接、取消和超时 | 无残留 worker、子进程、socket、discovery 文件；保存生命周期无超时 |
-| 本机已完成；CI 待执行 | 并发与恢复压力 | `npm run smoke:pressure`；远端再运行相同命令 | 本机验证不超过并发上限、资源组串行、100 项队列上限、dispose 和崩溃恢复；待 CI 链接补充跨平台证据 |
+| 已完成 | 固定工具矩阵 | 本机临时工具目录及 CI 运行 `STRICT_LANGUAGE_SMOKE=1 LANGUAGE_SMOKE_PROTOCOLS=1 node scripts/smoke-languages.mjs`；CI 固定 Ruff、Pyright、JDK/Maven/Gradle、Go/golangci-lint、Rust、LLVM | 本机与 CI 的八种语言 clean/broken、CLI/MCP/LSP 全部通过；证据：[run 34773982868](https://github.com/zakotoys/code-inspection/actions/runs/34773982868) |
+| 已完成 | 三平台路径与进程树 | Windows、macOS、Linux CI；包含空格/非 ASCII 路径、符号链接、取消和超时 | 三平台均通过且无残留 worker、子进程、socket、discovery 文件；证据：[run 34773982868](https://github.com/zakotoys/code-inspection/actions/runs/34773982868) |
+| 已完成 | 并发与恢复压力 | `npm run smoke:pressure`；远端三平台运行相同命令 | 不超过并发上限、资源组串行、100 项队列上限、dispose 和崩溃恢复均通过；证据：[run 34773982868](https://github.com/zakotoys/code-inspection/actions/runs/34773982868) |
 | 已完成 | 编辑器宿主验收 | VS Code 1.119.0、Zed Preview 1.20.0；隔离多根工作区逐一保存 JavaScript、TypeScript、Python、Go、Rust、Java、C、C++ 文件 | 八语言诊断与 MCP 数量/来源一致；修复后 `code-inspection` 与 MCP 均清零；原生语言服务器并存；退出后无残留进程、socket 或 discovery |
 | 待执行 | 发布签核 | 审阅变更日志、工具最低版本、信任说明和包内容 | 旧 v1 配置/协议路径不存在；发布负责人确认 registry 上传 |
 
-完成所有“待执行”项后，更新文档顶部状态和第 13 节完成定义；在此之前保留“实现完成、发布门禁待执行”的状态。
+发布签核完成后，将文档顶部状态更新为“可发布”并记录最终包审阅和 registry 上传确认。
