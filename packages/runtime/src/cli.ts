@@ -13,8 +13,8 @@ import {
 import { connectWorkspaceService } from "./ipc.js";
 import { createStderrLogger } from "./logger.js";
 import type { InspectorCapability, ServiceApi } from "./protocol.js";
+import { VERSION } from "./version.js";
 
-const VERSION = "0.2.0";
 const logger = createStderrLogger("cli");
 
 interface CliOptions {

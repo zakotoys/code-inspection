@@ -82,14 +82,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }));
 
-  const definitionChanges = registerMcpProvider(context, bundledLsp);
+  const definitionChanges = registerMcpProvider(context);
   context.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => {
     for (const client of languageClients.values()) void client.sendNotification("codeInspection/trust");
     definitionChanges?.fire();
   }));
 }
 
-function registerMcpProvider(context: vscode.ExtensionContext, _bundledLsp: string): vscode.EventEmitter<void> | undefined {
+function registerMcpProvider(context: vscode.ExtensionContext): vscode.EventEmitter<void> | undefined {
   const api = vscode.lm;
   if (!api) return undefined;
   const bundledMcp = context.asAbsolutePath("server/mcp.cjs");
@@ -100,7 +100,7 @@ function registerMcpProvider(context: vscode.ExtensionContext, _bundledLsp: stri
     provideMcpServerDefinitions: async () => {
       if (!vscode.workspace.isTrusted) return [];
       return (vscode.workspace.workspaceFolders ?? []).map((workspaceFolder) => {
-        const definition = new vscode.McpStdioServerDefinition("Code Inspection", process.execPath, [bundledMcp], { CODE_INSPECTION_WORKSPACE: workspaceFolder.uri.fsPath }, "0.2.0");
+        const definition = new vscode.McpStdioServerDefinition("Code Inspection", process.execPath, [bundledMcp], { CODE_INSPECTION_WORKSPACE: workspaceFolder.uri.fsPath }, String(context.extension.packageJSON.version));
         definition.cwd = workspaceFolder.uri;
         return definition;
       });

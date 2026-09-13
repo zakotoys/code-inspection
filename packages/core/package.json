@@ -4,6 +4,24 @@
   "description": "Protocol-independent code inspection engine and contracts.",
   "license": "Apache-2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zakotoys/code-inspection.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/zakotoys/code-inspection#readme",
+  "bugs": {
+    "url": "https://github.com/zakotoys/code-inspection/issues"
+  },
+  "keywords": [
+    "code-inspection",
+    "static-analysis",
+    "diagnostics",
+    "linting",
+    "mcp",
+    "lsp",
+    "multilingual"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -18,6 +36,10 @@
   ],
   "engines": {
     "node": ">=18.20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

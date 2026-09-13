@@ -1,0 +1,146 @@
+name: Release
+
+run-name: Release v${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact SemVer already present in every package manifest
+        required: true
+        type: string
+      npm_tag:
+        description: npm distribution tag
+        required: true
+        default: latest
+        type: string
+      prerelease:
+        description: Mark the GitHub release as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish v${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TAG: v${{ inputs.version }}
+      NPM_TAG: ${{ inputs.npm_tag }}
+      RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          target: wasm32-wasip2
+
+      - name: Use a trusted-publishing capable npm
+        run: npm install --global npm@11.7.0
+
+      - name: Verify request and successful CI
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Releases must run from main, not $GITHUB_REF" >&2
+            exit 1
+          fi
+          npm run release:verify -- --version "$RELEASE_VERSION"
+          ci_conclusion="$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&status=completed&per_page=20" --jq '[.workflow_runs[] | select(.event == "push")][0].conclusion // ""')"
+          if [[ "$ci_conclusion" != "success" ]]; then
+            echo "The push CI run for $GITHUB_SHA is not successful (conclusion: ${ci_conclusion:-missing})." >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "$RELEASE_TAG already points to $tag_commit, not $GITHUB_SHA." >&2
+              exit 1
+            fi
+          fi
+
+      - run: npm ci
+      - run: npm run check
+
+      - name: Run protocol and lifecycle smoke checks
+        run: |
+          node scripts/smoke-lsp.mjs
+          node scripts/smoke-lsp.mjs tests/fixtures/eslint-broken packages/runtime/dist/bundles/lsp.cjs
+          node scripts/smoke-mcp.mjs
+          node scripts/smoke-mcp.mjs tests/fixtures/eslint-broken packages/runtime/dist/bundles/mcp.cjs
+          node scripts/smoke-lifecycle.mjs
+          node scripts/smoke-pressure.mjs
+
+      - name: Build and verify release artifacts
+        run: |
+          npm run package
+          npm run smoke:package
+          npm run release:verify -- --version "$RELEASE_VERSION" --artifacts
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: code-inspection-${{ inputs.version }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            artifacts/zakotoys-code-inspection-core-${{ inputs.version }}.tgz
+            artifacts/zakotoys-code-inspection-runtime-${{ inputs.version }}.tgz
+            artifacts/code-inspection-vscode-${{ inputs.version }}.vsix
+            artifacts/code-inspection-zed-${{ inputs.version }}.wasm
+            artifacts/SHA256SUMS
+
+      - name: Publish npm packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm run release:publish -- --version "$RELEASE_VERSION" --tag "$NPM_TAG"
+
+      - name: Create GitHub release
+        run: |
+          files=(
+            "artifacts/zakotoys-code-inspection-core-$RELEASE_VERSION.tgz"
+            "artifacts/zakotoys-code-inspection-runtime-$RELEASE_VERSION.tgz"
+            "artifacts/code-inspection-vscode-$RELEASE_VERSION.vsix"
+            "artifacts/code-inspection-zed-$RELEASE_VERSION.wasm"
+            "artifacts/SHA256SUMS"
+          )
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            current_prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq .isPrerelease)"
+            if [[ "$current_prerelease" != "$RELEASE_PRERELEASE" ]]; then
+              echo "$RELEASE_TAG already exists with prerelease=$current_prerelease." >&2
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+            exit 0
+          fi
+
+          release_args=(release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_TAG" --generate-notes)
+          if git rev-parse --verify --quiet "refs/tags/$RELEASE_TAG" >/dev/null; then
+            release_args+=(--verify-tag)
+          else
+            release_args+=(--target "$GITHUB_SHA")
+          fi
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            release_args+=(--prerelease)
+          fi
+          gh "${release_args[@]}"
+

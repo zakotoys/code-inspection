@@ -5,6 +5,14 @@
   "description": "Local code inspection, build diagnostics, MCP, and editor integrations.",
   "license": "Apache-2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zakotoys/code-inspection.git"
+  },
+  "homepage": "https://github.com/zakotoys/code-inspection#readme",
+  "bugs": {
+    "url": "https://github.com/zakotoys/code-inspection/issues"
+  },
   "workspaces": [
     "packages/*",
     "extensions/vscode"
@@ -23,7 +31,9 @@
     "package:core": "node scripts/prepare-artifacts.mjs && npm pack --workspace @zakotoys/code-inspection-core --pack-destination artifacts",
     "package:runtime": "node scripts/prepare-artifacts.mjs && npm pack --workspace @zakotoys/code-inspection-runtime --pack-destination artifacts",
     "package:vscode": "node scripts/package-vscode.mjs",
-    "package:zed": "node scripts/package-zed.mjs"
+    "package:zed": "node scripts/package-zed.mjs",
+    "release:verify": "node scripts/release/verify.mjs",
+    "release:publish": "node scripts/release/publish-npm.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/inspector": "^2.5.0",

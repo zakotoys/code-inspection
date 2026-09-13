@@ -10,8 +10,9 @@ import {
 } from "@zakotoys/code-inspection-core";
 import { connectWorkspaceService, type WorkspaceClient } from "./ipc.js";
 import { createStderrLogger } from "./logger.js";
+import { VERSION } from "./version.js";
 
-const server = new McpServer({ name: "code-inspection-mcp-server", version: "0.2.0" });
+const server = new McpServer({ name: "code-inspection-mcp-server", version: VERSION });
 const clients = new Map<string, WorkspaceClient>();
 const connecting = new Map<string, Promise<WorkspaceClient>>();
 const logger = createStderrLogger("mcp");

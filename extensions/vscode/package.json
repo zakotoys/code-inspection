@@ -50,7 +50,7 @@
   },
   "scripts": {
     "build": "node scripts/prepare-server.mjs && tsc -p tsconfig.json",
-    "package": "npm run build && vsce package --out ../../artifacts/code-inspection-vscode-0.2.0.vsix"
+    "package": "npm run build && node ../../scripts/package-vscode.mjs"
   },
   "dependencies": {
     "vscode-languageclient": "^10.1.1"

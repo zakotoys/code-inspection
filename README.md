@@ -33,16 +33,12 @@ Local multi-language inspection shared by your editor, terminal, and AI agents. 
 
 Inspection never installs project dependencies automatically or replaces them with bundled lint/compiler tools.
 
-## Quick start from this repository
+## Quick start
 
-From the repository root:
+Install the runtime from npm. It provides the CLI, MCP, and LSP executables and installs core as a dependency:
 
 ```sh
-npm ci
-npm run build
-npm run package:core
-npm run package:runtime
-npm install --global ./artifacts/zakotoys-code-inspection-core-0.2.0.tgz ./artifacts/zakotoys-code-inspection-runtime-0.2.0.tgz
+npm install --global @zakotoys/code-inspection-runtime
 ```
 
 Switch to the project to inspect, with its ESLint dependency and configuration already installed:
@@ -57,7 +53,7 @@ code-inspection findings
 
 `init` creates a version 2 `.code-inspection.json` with every built-in check listed; ESLint is enabled and the other checks are disabled. It refuses to overwrite an existing file. Enable a check only after installing its tool and reviewing its command.
 
-These steps use local artifacts without requiring registry publication. Public npm/editor publication is a separate release action. The current CI builds/uploads editor artifacts; it has no publication workflow.
+Install `@zakotoys/code-inspection-core` as a project dependency when embedding the protocol-independent engine instead of using the runtime executables.
 
 ## CLI reference
 
@@ -238,6 +234,7 @@ VS Code / Zed --> LSP -----+    shared scheduling and in-memory findings
 | [tests/fixtures](tests/fixtures) | Clean/broken fixtures for every supported language and tool output. |
 | [scripts](scripts) | Packaging and process-level smoke checks. |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | Node 24 checks on Windows/macOS/Linux plus a pinned Ubuntu language-tool matrix and editor packaging. |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | Manual, CI-gated npm and GitHub Release publication from `main`. |
 
 ```sh
 npm ci
@@ -260,6 +257,8 @@ npm run package
 ```
 
 Output in `artifacts/`: `zakotoys-code-inspection-core-0.2.0.tgz`, `zakotoys-code-inspection-runtime-0.2.0.tgz`, `code-inspection-vscode-0.2.0.vsix`, and `code-inspection-zed-0.2.0.wasm`. Individual core/runtime/VS Code packaging commands require an existing build; `package:zed` runs Cargo itself.
+
+Maintainers publish by dispatching the **Release** workflow from `main` with the exact synchronized SemVer, an npm distribution tag, and the GitHub prerelease flag. It requires successful CI for the same commit, repeats the tests and protocol smoke checks, verifies all four artifacts, publishes core before runtime with npm provenance, and only then creates the GitHub Release. The release contains both npm tarballs, the VSIX, the Zed WASM, and `SHA256SUMS`. npm publication uses GitHub OIDC trusted publishing; a repository `NPM_TOKEN` is needed only to bootstrap packages that do not yet exist.
 
 ## Troubleshooting and scope
 

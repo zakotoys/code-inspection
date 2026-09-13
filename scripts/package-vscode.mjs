@@ -1,10 +1,11 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
+import { loadReleaseContext, repositoryRoot } from "./release/context.mjs";
 
-const repositoryRoot = resolve(".");
-const extensionRoot = resolve("extensions/vscode");
+const release = await loadReleaseContext();
+const extensionRoot = resolve(repositoryRoot, "extensions/vscode");
 const stageRoot = await mkdtemp(join(tmpdir(), "code-inspection-vscode-"));
 const stageNodeModules = join(stageRoot, "node_modules");
 const copiedPackages = new Set();
@@ -30,9 +31,9 @@ try {
   await cp(join(extensionRoot, ".vscodeignore"), join(stageRoot, ".vscodeignore"));
   await copyPackage("vscode-languageclient");
   await copyPackage("zod");
-  await mkdir(resolve("artifacts"), { recursive: true });
+  await mkdir(release.artifacts.directory, { recursive: true });
   const vsce = resolve(repositoryRoot, "node_modules/@vscode/vsce/vsce");
-  const output = resolve("artifacts/code-inspection-vscode-0.2.0.vsix");
+  const output = release.artifacts.vscode.absolute;
   const exitCode = await new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [vsce, "package", "--out", output], { cwd: stageRoot, stdio: "inherit", windowsHide: true });
     child.once("error", reject);

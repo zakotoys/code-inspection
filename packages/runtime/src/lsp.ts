@@ -22,6 +22,7 @@ import {
 } from "@zakotoys/code-inspection-core";
 import { connectWorkspaceService, type WorkspaceClient } from "./ipc.js";
 import { createStderrLogger } from "./logger.js";
+import { VERSION } from "./version.js";
 
 const connection = createConnection(ProposedFeatures.all, process.stdin, process.stdout);
 const documents = new TextDocuments(TextDocument);
@@ -82,7 +83,7 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
         }
       }
     },
-    serverInfo: { name: "code-inspection", version: "0.2.0" }
+    serverInfo: { name: "code-inspection", version: VERSION }
   };
 });
 

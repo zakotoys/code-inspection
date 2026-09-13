@@ -33,16 +33,12 @@
 
 检查过程绝不会自动安装项目依赖，也不会用内置的 lint/compiler 工具替换项目工具。
 
-## 从本仓库快速开始
+## 快速开始
 
-在仓库根目录执行：
+从 npm 安装运行时。它提供 CLI、MCP 和 LSP 可执行文件，并自动安装 core 依赖：
 
 ```sh
-npm ci
-npm run build
-npm run package:core
-npm run package:runtime
-npm install --global ./artifacts/zakotoys-code-inspection-core-0.2.0.tgz ./artifacts/zakotoys-code-inspection-runtime-0.2.0.tgz
+npm install --global @zakotoys/code-inspection-runtime
 ```
 
 切换到要检查的项目；该项目应已安装 ESLint 依赖并具有 ESLint 配置：
@@ -57,7 +53,7 @@ code-inspection findings
 
 `init` 会创建版本为 2 的 `.code-inspection.json`，其中列出所有内置检查；默认启用 ESLint，禁用其他检查。它会拒绝覆盖已有文件。只有在安装相应工具并审阅其命令后，才应启用该检查。
 
-以上步骤使用本地产物，不要求先发布到软件包注册表。公开发布 npm 包或编辑器扩展是单独的发布操作。当前 CI 会构建并上传编辑器产物，但不包含发布工作流。
+如果要嵌入与协议无关的检查引擎，而不是使用运行时可执行文件，请将 `@zakotoys/code-inspection-core` 安装为项目依赖。
 
 ## CLI 参考
 
@@ -238,6 +234,7 @@ VS Code / Zed --> LSP -----+    共享调度和内存检查结果
 | [tests/fixtures](tests/fixtures) | 每种支持语言的正常/错误 fixture 和工具输出。 |
 | [scripts](scripts) | 打包和进程级冒烟检查。 |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | 在 Windows/macOS/Linux 上执行 Node 24 检查，并运行固定版本的 Ubuntu 语言工具矩阵和编辑器打包。 |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | 从 `main` 手动触发、受 CI 门禁约束的 npm 与 GitHub Release 发布。 |
 
 ```sh
 npm ci
@@ -260,6 +257,8 @@ npm run package
 ```
 
 `artifacts/` 中会生成：`zakotoys-code-inspection-core-0.2.0.tgz`、`zakotoys-code-inspection-runtime-0.2.0.tgz`、`code-inspection-vscode-0.2.0.vsix` 和 `code-inspection-zed-0.2.0.wasm`。单独执行 core/runtime/VS Code 打包命令前必须已有构建结果；`package:zed` 会自行运行 Cargo。
+
+维护者通过 `main` 分支的 **Release** 工作流发布，输入各 manifest 中完全一致的 SemVer、npm distribution tag 和 GitHub 预发布标记。工作流要求同一提交的 CI 已成功，并会再次执行测试和协议冒烟检查、校验全部四个产物、先发布 core 再发布 runtime（包含 npm provenance），最后才创建 GitHub Release。Release 包含两个 npm tarball、VSIX、Zed WASM 和 `SHA256SUMS`。npm 发布使用 GitHub OIDC Trusted Publishing；只有在首次创建尚不存在的软件包时才需要仓库级 `NPM_TOKEN`。
 
 ## 故障排查与范围
 
