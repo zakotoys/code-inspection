@@ -1,89 +1,87 @@
-name: Release
-
-run-name: Release v${{ inputs.version }}
+name: Publish release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Exact SemVer already present in every package manifest
-        required: true
-        type: string
-      npm_tag:
-        description: npm distribution tag
-        required: true
-        default: latest
-        type: string
-      prerelease:
-        description: Mark the GitHub release as a prerelease
-        required: true
-        default: false
-        type: boolean
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
-  actions: read
   contents: write
   id-token: write
 
 concurrency:
-  group: release
+  group: publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Publish v${{ inputs.version }}
+  publish:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: release
-    env:
-      RELEASE_VERSION: ${{ inputs.version }}
-      RELEASE_TAG: v${{ inputs.version }}
-      NPM_TAG: ${{ inputs.npm_tag }}
-      RELEASE_PRERELEASE: ${{ inputs.prerelease }}
-      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
+      - name: Check out release
+        uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-node@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          cache: npm
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
         with:
           target: wasm32-wasip2
 
-      - name: Use a trusted-publishing capable npm
+      # Trusted publishing requires npm 11.5.1 or newer.
+      - name: Update npm CLI
         run: npm install --global npm@11.7.0
 
-      - name: Verify request and successful CI
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag and package versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Releases must run from main, not $GITHUB_REF" >&2
+          package_version="$(node -p "require('./package.json').version")"
+          tag_version="${RELEASE_TAG#v}"
+          if [[ "$package_version" != "$tag_version" ]]; then
+            echo "Release tag $RELEASE_TAG does not match package.json version $package_version." >&2
             exit 1
           fi
-          npm run release:verify -- --version "$RELEASE_VERSION"
-          ci_conclusion="$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&status=completed&per_page=20" --jq '[.workflow_runs[] | select(.event == "push")][0].conclusion // ""')"
-          if [[ "$ci_conclusion" != "success" ]]; then
-            echo "The push CI run for $GITHUB_SHA is not successful (conclusion: ${ci_conclusion:-missing})." >&2
+
+          workspace_versions="$(npm pkg get version --workspaces)"
+          if ! jq -e --arg version "$package_version" 'all(.[]; . == $version)' <<<"$workspace_versions" >/dev/null; then
+            echo "Every npm workspace version must match $package_version." >&2
             exit 1
           fi
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
-            tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
-            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
-              echo "$RELEASE_TAG already points to $tag_commit, not $GITHUB_SHA." >&2
-              exit 1
-            fi
+
+          runtime_core_version="$(node -p "require('./packages/runtime/package.json').dependencies['@zakotoys/code-inspection-core']")"
+          if [[ "$runtime_core_version" != "$package_version" ]]; then
+            echo "Runtime must depend on core@$package_version." >&2
+            exit 1
           fi
 
-      - run: npm ci
-      - run: npm run check
+          cargo_version="$(cargo metadata --locked --no-deps --format-version 1 --manifest-path extensions/zed/Cargo.toml | jq -r '.packages[] | select(.name == "code_inspection_zed") | .version')"
+          if [[ "$cargo_version" != "$package_version" ]]; then
+            echo "Zed Cargo version $cargo_version does not match $package_version." >&2
+            exit 1
+          fi
+          grep -Fxq "version = \"$package_version\"" extensions/zed/extension.toml
+          grep -Fxq "export const VERSION = \"$package_version\" as const;" packages/runtime/src/version.ts
 
-      - name: Run protocol and lifecycle smoke checks
+          echo "PACKAGE_VERSION=$package_version" >>"$GITHUB_ENV"
+          if [[ "$package_version" == *-* ]]; then
+            echo "NPM_TAG=next" >>"$GITHUB_ENV"
+          else
+            echo "NPM_TAG=latest" >>"$GITHUB_ENV"
+          fi
+
+      - name: Run release checks
         run: |
+          npm run check
           node scripts/smoke-lsp.mjs
           node scripts/smoke-lsp.mjs tests/fixtures/eslint-broken packages/runtime/dist/bundles/lsp.cjs
           node scripts/smoke-mcp.mjs
@@ -91,56 +89,51 @@ jobs:
           node scripts/smoke-lifecycle.mjs
           node scripts/smoke-pressure.mjs
 
-      - name: Build and verify release artifacts
+      - name: Build release artifacts
         run: |
           npm run package
           npm run smoke:package
-          npm run release:verify -- --version "$RELEASE_VERSION" --artifacts
+          cd artifacts
+          sha256sum \
+            "zakotoys-code-inspection-core-$PACKAGE_VERSION.tgz" \
+            "zakotoys-code-inspection-runtime-$PACKAGE_VERSION.tgz" \
+            "code-inspection-vscode-$PACKAGE_VERSION.vsix" \
+            "code-inspection-zed-$PACKAGE_VERSION.wasm" \
+            >SHA256SUMS
 
-      - uses: actions/upload-artifact@v7
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v7.0.1
         with:
-          name: code-inspection-${{ inputs.version }}
+          name: code-inspection-${{ github.ref_name }}
           if-no-files-found: error
           retention-days: 30
           path: |
-            artifacts/zakotoys-code-inspection-core-${{ inputs.version }}.tgz
-            artifacts/zakotoys-code-inspection-runtime-${{ inputs.version }}.tgz
-            artifacts/code-inspection-vscode-${{ inputs.version }}.vsix
-            artifacts/code-inspection-zed-${{ inputs.version }}.wasm
+            artifacts/*.tgz
+            artifacts/*.vsix
+            artifacts/*.wasm
             artifacts/SHA256SUMS
 
-      - name: Publish npm packages
+      - name: Publish core with provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm run release:publish -- --version "$RELEASE_VERSION" --tag "$NPM_TAG"
+        run: npm publish "./artifacts/zakotoys-code-inspection-core-$PACKAGE_VERSION.tgz" --tag "$NPM_TAG" --provenance
 
-      - name: Create GitHub release
-        run: |
-          files=(
-            "artifacts/zakotoys-code-inspection-core-$RELEASE_VERSION.tgz"
-            "artifacts/zakotoys-code-inspection-runtime-$RELEASE_VERSION.tgz"
-            "artifacts/code-inspection-vscode-$RELEASE_VERSION.vsix"
-            "artifacts/code-inspection-zed-$RELEASE_VERSION.wasm"
-            "artifacts/SHA256SUMS"
-          )
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            current_prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq .isPrerelease)"
-            if [[ "$current_prerelease" != "$RELEASE_PRERELEASE" ]]; then
-              echo "$RELEASE_TAG already exists with prerelease=$current_prerelease." >&2
-              exit 1
-            fi
-            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
-            exit 0
-          fi
+      - name: Publish runtime with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish "./artifacts/zakotoys-code-inspection-runtime-$PACKAGE_VERSION.tgz" --tag "$NPM_TAG" --provenance
 
-          release_args=(release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_TAG" --generate-notes)
-          if git rev-parse --verify --quiet "refs/tags/$RELEASE_TAG" >/dev/null; then
-            release_args+=(--verify-tag)
-          else
-            release_args+=(--target "$GITHUB_SHA")
-          fi
-          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
-            release_args+=(--prerelease)
-          fi
-          gh "${release_args[@]}"
-
+      - name: Create GitHub Release and changelog
+        uses: softprops/action-gh-release@v3.0.3
+        with:
+          token: ${{ github.token }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/*.tgz
+            artifacts/*.vsix
+            artifacts/*.wasm
+            artifacts/SHA256SUMS

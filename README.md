@@ -234,7 +234,7 @@ VS Code / Zed --> LSP -----+    shared scheduling and in-memory findings
 | [tests/fixtures](tests/fixtures) | Clean/broken fixtures for every supported language and tool output. |
 | [scripts](scripts) | Packaging and process-level smoke checks. |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | Node 24 checks on Windows/macOS/Linux plus a pinned Ubuntu language-tool matrix and editor packaging. |
-| [.github/workflows/release.yml](.github/workflows/release.yml) | Manual, CI-gated npm and GitHub Release publication from `main`. |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | Tag-triggered npm publication and GitHub Release creation. |
 
 ```sh
 npm ci
@@ -258,7 +258,7 @@ npm run package
 
 Output in `artifacts/`: `zakotoys-code-inspection-core-0.2.0.tgz`, `zakotoys-code-inspection-runtime-0.2.0.tgz`, `code-inspection-vscode-0.2.0.vsix`, and `code-inspection-zed-0.2.0.wasm`. Individual core/runtime/VS Code packaging commands require an existing build; `package:zed` runs Cargo itself.
 
-Maintainers publish by dispatching the **Release** workflow from `main` with the exact synchronized SemVer, an npm distribution tag, and the GitHub prerelease flag. It requires successful CI for the same commit, repeats the tests and protocol smoke checks, verifies all four artifacts, publishes core before runtime with npm provenance, and only then creates the GitHub Release. The release contains both npm tarballs, the VSIX, the Zed WASM, and `SHA256SUMS`. npm publication uses GitHub OIDC trusted publishing; a repository `NPM_TOKEN` is needed only to bootstrap packages that do not yet exist.
+Maintainers publish by pushing a `vX.Y.Z` tag after CI succeeds for the corresponding `main` commit. The **Publish release** workflow verifies the tag against the npm workspace, runtime dependency, Cargo, Zed, and runtime versions; repeats the tests and protocol smoke checks; builds the four artifacts; publishes core before runtime with npm provenance; and uses `softprops/action-gh-release` to create the GitHub Release. Stable versions use the npm `latest` tag and prereleases use `next`. The release contains both npm tarballs, the VSIX, the Zed WASM, and `SHA256SUMS`. npm publication uses GitHub OIDC trusted publishing; a repository `NPM_TOKEN` is needed only to bootstrap packages that do not yet exist.
 
 ## Troubleshooting and scope
 

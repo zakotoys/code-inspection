@@ -234,7 +234,7 @@ VS Code / Zed --> LSP -----+    共享调度和内存检查结果
 | [tests/fixtures](tests/fixtures) | 每种支持语言的正常/错误 fixture 和工具输出。 |
 | [scripts](scripts) | 打包和进程级冒烟检查。 |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | 在 Windows/macOS/Linux 上执行 Node 24 检查，并运行固定版本的 Ubuntu 语言工具矩阵和编辑器打包。 |
-| [.github/workflows/release.yml](.github/workflows/release.yml) | 从 `main` 手动触发、受 CI 门禁约束的 npm 与 GitHub Release 发布。 |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | 由 tag 触发的 npm 发布与 GitHub Release 创建。 |
 
 ```sh
 npm ci
@@ -258,7 +258,7 @@ npm run package
 
 `artifacts/` 中会生成：`zakotoys-code-inspection-core-0.2.0.tgz`、`zakotoys-code-inspection-runtime-0.2.0.tgz`、`code-inspection-vscode-0.2.0.vsix` 和 `code-inspection-zed-0.2.0.wasm`。单独执行 core/runtime/VS Code 打包命令前必须已有构建结果；`package:zed` 会自行运行 Cargo。
 
-维护者通过 `main` 分支的 **Release** 工作流发布，输入各 manifest 中完全一致的 SemVer、npm distribution tag 和 GitHub 预发布标记。工作流要求同一提交的 CI 已成功，并会再次执行测试和协议冒烟检查、校验全部四个产物、先发布 core 再发布 runtime（包含 npm provenance），最后才创建 GitHub Release。Release 包含两个 npm tarball、VSIX、Zed WASM 和 `SHA256SUMS`。npm 发布使用 GitHub OIDC Trusted Publishing；只有在首次创建尚不存在的软件包时才需要仓库级 `NPM_TOKEN`。
+维护者应在对应的 `main` 提交通过 CI 后推送 `vX.Y.Z` tag。**Publish release** 工作流会校验 tag 与 npm workspace、runtime 依赖、Cargo、Zed 和运行时版本是否一致，再次执行测试和协议冒烟检查，构建四个产物，包含 npm provenance 地先发布 core 再发布 runtime，并使用 `softprops/action-gh-release` 创建 GitHub Release。稳定版本使用 npm `latest` tag，预发布版本使用 `next`。Release 包含两个 npm tarball、VSIX、Zed WASM 和 `SHA256SUMS`。npm 发布使用 GitHub OIDC Trusted Publishing；只有在首次创建尚不存在的软件包时才需要仓库级 `NPM_TOKEN`。
 
 ## 故障排查与范围
 

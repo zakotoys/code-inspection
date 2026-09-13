@@ -234,7 +234,7 @@ VS Code / Zed --> LSP -----+    共有スケジューリングとメモリ内の
 | [tests/fixtures](tests/fixtures) | 対応する各言語の正常/エラー fixture とツール出力。 |
 | [scripts](scripts) | パッケージ処理とプロセスレベルのスモーク検査。 |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | Windows/macOS/Linux での Node 24 検査、バージョン固定済み Ubuntu 言語ツールマトリクス、エディターのパッケージ処理。 |
-| [.github/workflows/release.yml](.github/workflows/release.yml) | `main` から手動実行する、CI ゲート付き npm/GitHub Release 公開。 |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | tag を契機とする npm 公開と GitHub Release 作成。 |
 
 ```sh
 npm ci
@@ -258,7 +258,7 @@ npm run package
 
 `artifacts/` の出力：`zakotoys-code-inspection-core-0.2.0.tgz`、`zakotoys-code-inspection-runtime-0.2.0.tgz`、`code-inspection-vscode-0.2.0.vsix`、`code-inspection-zed-0.2.0.wasm`。core/runtime/VS Code の各パッケージコマンドを個別に実行する場合は、事前にビルドが必要です。`package:zed` は自身で Cargo を実行します。
 
-メンテナーは `main` の **Release** ワークフローを実行し、全 manifest で完全に一致する SemVer、npm distribution tag、GitHub のプレリリースフラグを入力します。ワークフローは同一コミットの CI 成功を必須とし、テストとプロトコルのスモーク検査を再実行して 4 つの成果物を検証します。その後、npm provenance 付きで core、runtime の順に公開し、すべて成功してから GitHub Release を作成します。Release には 2 つの npm tarball、VSIX、Zed WASM、`SHA256SUMS` が含まれます。npm 公開には GitHub OIDC Trusted Publishing を使用し、まだ存在しないパッケージを初回作成するときだけリポジトリの `NPM_TOKEN` が必要です。
+メンテナーは、対象の `main` コミットの CI が成功してから `vX.Y.Z` tag を push します。**Publish release** ワークフローは、tag と npm workspace、runtime 依存関係、Cargo、Zed、ランタイムの各バージョンが一致することを検証し、テストとプロトコルのスモーク検査を再実行して 4 つの成果物をビルドします。その後、npm provenance 付きで core、runtime の順に公開し、`softprops/action-gh-release` で GitHub Release を作成します。安定版には npm の `latest` tag、プレリリースには `next` を使用します。Release には 2 つの npm tarball、VSIX、Zed WASM、`SHA256SUMS` が含まれます。npm 公開には GitHub OIDC Trusted Publishing を使用し、まだ存在しないパッケージを初回作成するときだけリポジトリの `NPM_TOKEN` が必要です。
 
 ## トラブルシューティングと対象範囲
 

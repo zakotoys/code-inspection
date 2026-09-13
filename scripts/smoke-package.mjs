@@ -2,9 +2,11 @@ import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadReleaseContext, repositoryRoot } from "./release/context.mjs";
+import { fileURLToPath } from "node:url";
 
-const release = await loadReleaseContext();
+const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
+const coreManifest = JSON.parse(await readFile(join(repositoryRoot, "packages/core/package.json"), "utf8"));
+const runtimeManifest = JSON.parse(await readFile(join(repositoryRoot, "packages/runtime/package.json"), "utf8"));
 const consumerRoot = await mkdtemp(join(tmpdir(), "code-inspection-consumer-"));
 const workspace = join(consumerRoot, "fixture with spaces");
 const dataDirectory = join(consumerRoot, "state");
@@ -28,19 +30,23 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function tarballName(manifest) {
+  return `${manifest.name.replace(/^@/, "").replace("/", "-")}-${manifest.version}.tgz`;
+}
+
 try {
   await cp(join(repositoryRoot, "tests/fixtures/eslint-broken"), workspace, { recursive: true });
   await writeFile(join(consumerRoot, "package.json"), '{"name":"code-inspection-consumer","private":true,"version":"1.0.0"}\n', "utf8");
-  const coreTarball = release.packages.core.tarball.absolute;
-  const runtimeTarball = release.packages.runtime.tarball.absolute;
+  const coreTarball = join(repositoryRoot, "artifacts", tarballName(coreManifest));
+  const runtimeTarball = join(repositoryRoot, "artifacts", tarballName(runtimeManifest));
   const install = await run(npmCommand, ["install", "--no-audit", "--no-fund", "--ignore-scripts", coreTarball, runtimeTarball, "eslint@10.10.0"]);
   assert(install.code === 0, `Consumer install failed: ${install.stderr}`);
   const installedCore = JSON.parse(await readFile(join(consumerRoot, "node_modules/@zakotoys/code-inspection-core/package.json"), "utf8"));
   const installedRuntime = JSON.parse(await readFile(join(consumerRoot, "node_modules/@zakotoys/code-inspection-runtime/package.json"), "utf8"));
-  assert(installedCore.name === release.packages.core.name && installedCore.version === release.version, "Installed core tarball has unexpected package metadata.");
-  assert(installedRuntime.name === release.packages.runtime.name && installedRuntime.version === release.version, "Installed runtime tarball has unexpected package metadata.");
+  assert(installedCore.name === coreManifest.name && installedCore.version === coreManifest.version, "Installed core tarball has unexpected package metadata.");
+  assert(installedRuntime.name === runtimeManifest.name && installedRuntime.version === runtimeManifest.version, "Installed runtime tarball has unexpected package metadata.");
   const version = await run(cliCommand, ["--version"]);
-  assert(version.code === 0 && version.stdout.trim() === release.version, `Installed CLI reported an unexpected version: ${version.stdout || version.stderr}`);
+  assert(version.code === 0 && version.stdout.trim() === runtimeManifest.version, `Installed CLI reported an unexpected version: ${version.stdout || version.stderr}`);
   const env = { ...process.env, CODE_INSPECTION_DATA_DIR: dataDirectory, CODE_INSPECTION_IDLE_TIMEOUT_MS: "1000" };
   const trust = await run(cliCommand, ["trust", workspace], { env });
   assert(trust.code === 0, `Consumer trust failed: ${trust.stderr}`);
