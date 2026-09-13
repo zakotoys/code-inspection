@@ -2,7 +2,7 @@
   "name": "code-inspection-vscode",
   "displayName": "Code Inspection",
   "description": "Save-triggered multi-language diagnostics with a local workspace service and MCP server.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "zakotoys",
   "license": "Apache-2.0",
   "repository": {

@@ -197,7 +197,7 @@ MCP にキャンセル/信頼ツールはありません。CLI を使用して�
 
 ```sh
 npm run package:vscode
-code --install-extension artifacts/code-inspection-vscode-0.2.0.vsix
+code --install-extension artifacts/code-inspection-vscode-0.2.1.vsix
 ```
 
 ローカルワークスペースを開き、Workspace Trust を付与します。拡張はバンドル済み LSP を起動し、対応するローカル信頼記録を付与して、ワークスペースフォルダーごとにバンドル済み MCP 定義を提供します。対応する JavaScript、TypeScript、Python、Java、Go、Rust、C、C++ ファイルを保存すると検査され、修正して保存すると解決済みの診断が消えます。信頼されていないエディターセッションでは LSP 検査を実行せず、MCP 定義も公開しません。
@@ -256,7 +256,9 @@ rustup target add wasm32-wasip2
 npm run package
 ```
 
-`artifacts/` の出力：`zakotoys-code-inspection-core-0.2.0.tgz`、`zakotoys-code-inspection-runtime-0.2.0.tgz`、`code-inspection-vscode-0.2.0.vsix`、`code-inspection-zed-0.2.0.wasm`。core/runtime/VS Code の各パッケージコマンドを個別に実行する場合は、事前にビルドが必要です。`package:zed` は自身で Cargo を実行します。
+`artifacts/` の出力：`zakotoys-code-inspection-core-0.2.1.tgz`、`zakotoys-code-inspection-runtime-0.2.1.tgz`、`code-inspection-vscode-0.2.1.vsix`、`code-inspection-zed-0.2.1.wasm`。core/runtime/VS Code の各パッケージコマンドを個別に実行する場合は、事前にビルドが必要です。`package:zed` は自身で Cargo を実行します。
+
+公開前に `npm run version:set -- X.Y.Z` を実行すると、すべてのリリースメタデータを同期できます。このコマンドは npm workspace のバージョンと lockfile、runtime から core への依存、VS Code と Zed のバージョン、ランタイムのバージョン定数、および 3 つの README にあるバージョン付き成果物の例を更新します。
 
 メンテナーは、対象の `main` コミットの CI が成功してから `vX.Y.Z` tag を push します。**Publish release** ワークフローは、tag と npm workspace、runtime 依存関係、Cargo、Zed、ランタイムの各バージョンが一致することを検証し、テストとプロトコルのスモーク検査を再実行して 4 つの成果物をビルドします。その後、npm provenance 付きで core、runtime の順に公開し、`softprops/action-gh-release` で GitHub Release を作成します。安定版には npm の `latest` tag、プレリリースには `next` を使用します。Release には 2 つの npm tarball、VSIX、Zed WASM、`SHA256SUMS` が含まれます。npm 公開には GitHub OIDC Trusted Publishing を使用し、まだ存在しないパッケージを初回作成するときだけリポジトリの `NPM_TOKEN` が必要です。
 

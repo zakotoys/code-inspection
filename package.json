@@ -1,6 +1,6 @@
 {
   "name": "@zakotoys/code-inspection",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Local code inspection, build diagnostics, MCP, and editor integrations.",
   "license": "Apache-2.0",
@@ -27,6 +27,7 @@
     "smoke:lifecycle": "npm run build && node scripts/smoke-lifecycle.mjs",
     "smoke:pressure": "npm run build && node scripts/smoke-pressure.mjs",
     "smoke:package": "node scripts/smoke-package.mjs",
+    "version:set": "node scripts/set-version.mjs",
     "package": "npm run build && npm run package:core && npm run package:runtime && npm run package:vscode && npm run package:zed",
     "package:core": "node scripts/prepare-artifacts.mjs && npm pack --workspace @zakotoys/code-inspection-core --pack-destination artifacts",
     "package:runtime": "node scripts/prepare-artifacts.mjs && npm pack --workspace @zakotoys/code-inspection-runtime --pack-destination artifacts",
@@ -40,6 +41,8 @@
     "@vscode/vsce": "^3.9.2",
     "eslint": "^10.10.0",
     "esbuild": "^0.28.2",
+    "jsonc-parser": "^3.3.1",
+    "semver": "^7.8.5",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "vitest": "^5.0.0"
