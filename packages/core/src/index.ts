@@ -1,6 +1,7 @@
 export * from "./config.js";
 export * from "./engine.js";
 export * from "./errors.js";
+export * from "./findings.js";
 export * from "./languages.js";
 export * from "./matching.js";
 export * from "./parsers.js";

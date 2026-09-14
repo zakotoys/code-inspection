@@ -240,9 +240,11 @@ describe("workspace service", () => {
   it("coalesces queued requests and exposes the shared result set", async () => {
     const service = await serviceFor("eslint-broken");
     const [first, second] = await Promise.all([
-      service.runInspection({ checkId: "eslint", trigger: "manual" }),
-      service.runInspection({ checkId: "eslint", scope: { files: ["broken.js"] }, trigger: "manual" })
+      service.runInspection({ checkId: "eslint", trigger: "save" }),
+      service.runInspection({ checkId: "eslint", scope: { files: ["broken.js"] }, trigger: "save" })
     ]);
+    expect(first.run.outcome).toBe("queued");
+    expect(second.run.outcome).toBe("queued");
     expect(second.run.runId).toBe(first.run.runId);
     const run = await waitForRun(service, first.run.runId);
     expect(run.outcome).toBe("completed");

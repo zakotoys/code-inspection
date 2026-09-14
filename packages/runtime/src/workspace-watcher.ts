@@ -33,7 +33,6 @@ export async function watchWorkspace(rootInput: string, options: WorkspaceWatche
   const root = resolve(rootInput);
   const watchers = new Map<string, FSWatcher>();
   const pendingDirectories = new Set<string>();
-  const recentEvents = new Map<string, number>();
   let closed = false;
 
   const emit = (eventType: "rename" | "change", absolutePath?: string): void => {
@@ -42,16 +41,6 @@ export async function watchWorkspace(rootInput: string, options: WorkspaceWatche
     if (relativePath !== undefined && (relativePath === "" || relativePath === "." || relativePath.startsWith("../") || relativePath === "..")) {
       options.onChange(eventType);
       return;
-    }
-    const key = `${eventType}:${relativePath ?? "<unknown>"}`;
-    const now = Date.now();
-    const previous = recentEvents.get(key);
-    if (previous !== undefined && now - previous < 50) return;
-    recentEvents.set(key, now);
-    if (recentEvents.size > 2048) {
-      for (const [eventKey, eventAt] of recentEvents) {
-        if (now - eventAt > 1000) recentEvents.delete(eventKey);
-      }
     }
     options.onChange(eventType, relativePath);
   };
@@ -159,7 +148,6 @@ export async function watchWorkspace(rootInput: string, options: WorkspaceWatche
       for (const watcher of watchers.values()) watcher.close();
       watchers.clear();
       pendingDirectories.clear();
-      recentEvents.clear();
     }
   };
 }

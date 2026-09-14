@@ -140,10 +140,9 @@ async function inspectSaved(event: DidSaveTextDocumentParams): Promise<void> {
     const activeClient = requireClient();
     const savedFile = fileURLToPath(event.textDocument.uri);
     const response = await activeClient.api.didSave({ file: savedFile });
-    for (const run of response.runs) {
-      await waitForRun(run.runId);
-    }
-    await queuePublish();
+    void Promise.all(response.runs.map((run) => waitForRun(run.runId)))
+      .then(() => queuePublish())
+      .catch((error) => logger.error("Unable to publish save inspection results", error));
   } catch (error) {
     logger.error("Save inspection failed", error);
     const uri = event.textDocument.uri;

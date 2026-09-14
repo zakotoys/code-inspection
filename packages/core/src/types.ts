@@ -84,6 +84,7 @@ export interface Finding {
 }
 
 export interface InspectionSummary {
+  truncated?: boolean | undefined;
   errorCount: number;
   warningCount: number;
   infoCount: number;
@@ -126,11 +127,19 @@ export interface InspectionErrorInfo {
 export interface RunSnapshot {
   run: InspectionRun;
   findings: Finding[];
+  changes?: FindingChanges | undefined;
   freshness: {
     generation: number;
     dirtyFiles: string[];
     stale: boolean;
   };
+}
+
+export interface FindingChanges {
+  baseline: boolean;
+  initializedFiles: string[];
+  added: Finding[];
+  resolved: Finding[];
 }
 
 export interface FindingsPage {
