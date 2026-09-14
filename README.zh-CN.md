@@ -197,7 +197,7 @@ MCP 不提供取消/信任工具；请使用 CLI。检查结果范围采用从�
 
 ```sh
 npm run package:vscode
-code --install-extension artifacts/code-inspection-vscode-0.2.1.vsix
+code --install-extension artifacts/code-inspection-vscode-0.2.2.vsix
 ```
 
 打开本地工作区并授予 Workspace Trust。扩展会启动内置 LSP、授予相应的本地信任记录，并为每个工作区文件夹提供内置 MCP 定义。保存支持的 JavaScript、TypeScript、Python、Java、Go、Rust、C 或 C++ 文件即可执行检查；修复并保存后，会清除已解决的诊断。未受信任的编辑器会话不会执行 LSP 检查，也不会提供 MCP 定义。
@@ -256,7 +256,7 @@ rustup target add wasm32-wasip2
 npm run package
 ```
 
-`artifacts/` 中会生成：`zakotoys-code-inspection-core-0.2.1.tgz`、`zakotoys-code-inspection-runtime-0.2.1.tgz`、`code-inspection-vscode-0.2.1.vsix` 和 `code-inspection-zed-0.2.1.wasm`。单独执行 core/runtime/VS Code 打包命令前必须已有构建结果；`package:zed` 会自行运行 Cargo。
+`artifacts/` 中会生成：`zakotoys-code-inspection-core-0.2.2.tgz`、`zakotoys-code-inspection-runtime-0.2.2.tgz`、`code-inspection-vscode-0.2.2.vsix` 和 `code-inspection-zed-0.2.2.wasm`。单独执行 core/runtime/VS Code 打包命令前必须已有构建结果；`package:zed` 会自行运行 Cargo。
 
 发布前运行 `npm run version:set -- X.Y.Z` 即可同步全部发布元数据。该命令会更新 npm workspace 版本与 lockfile、runtime 对 core 的依赖、VS Code 和 Zed 版本、运行时版本常量，以及三份 README 中包含版本号的产物示例。
 

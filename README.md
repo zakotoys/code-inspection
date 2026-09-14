@@ -197,7 +197,7 @@ After `npm ci` and `npm run build`:
 
 ```sh
 npm run package:vscode
-code --install-extension artifacts/code-inspection-vscode-0.2.1.vsix
+code --install-extension artifacts/code-inspection-vscode-0.2.2.vsix
 ```
 
 Open a local workspace and grant Workspace Trust. The extension launches its bundled LSP, grants the matching local trust record, and provides a bundled MCP definition per workspace folder. Save supported JavaScript, TypeScript, Python, Java, Go, Rust, C, or C++ files to inspect; fix/save to clear resolved diagnostics. Untrusted editor sessions do not execute LSP inspections or expose MCP definitions.
@@ -256,7 +256,7 @@ rustup target add wasm32-wasip2
 npm run package
 ```
 
-Output in `artifacts/`: `zakotoys-code-inspection-core-0.2.1.tgz`, `zakotoys-code-inspection-runtime-0.2.1.tgz`, `code-inspection-vscode-0.2.1.vsix`, and `code-inspection-zed-0.2.1.wasm`. Individual core/runtime/VS Code packaging commands require an existing build; `package:zed` runs Cargo itself.
+Output in `artifacts/`: `zakotoys-code-inspection-core-0.2.2.tgz`, `zakotoys-code-inspection-runtime-0.2.2.tgz`, `code-inspection-vscode-0.2.2.vsix`, and `code-inspection-zed-0.2.2.wasm`. Individual core/runtime/VS Code packaging commands require an existing build; `package:zed` runs Cargo itself.
 
 Synchronize all release metadata before publishing with `npm run version:set -- X.Y.Z`. The command updates npm workspace versions and locks, the runtime core dependency, VS Code and Zed versions, the runtime version constant, and versioned artifact examples in all three READMEs.
 
