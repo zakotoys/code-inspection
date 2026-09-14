@@ -1,0 +1,44 @@
+name: PR Review
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, review_requested, synchronize]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    if: >-
+      github.event.sender.type != 'Bot' &&
+      (
+        github.event_name == 'pull_request_target' ||
+        github.event.issue.pull_request != null
+      )
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Run PR Review
+        uses: docker://ghcr.io/infinitypacer/pr-review-runner:latest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          PRR_DESCRIBE_MODEL: deepseek/deepseek-v4-flash
+          PRR_DESCRIBE_REASONING_EFFORT: high
+          PRR_AUTO_REVIEW_MODEL: deepseek/deepseek-v4-flash
+          PRR_AUTO_REVIEW_REASONING_EFFORT: high
+          PRR_MANUAL_REVIEW_MODEL: deepseek/deepseek-v4-flash
+          PRR_MANUAL_REVIEW_REASONING_EFFORT: high
+          PRR_ASK_MODEL: deepseek/deepseek-v4-flash
+          PRR_ASK_REASONING_EFFORT: high
+          PRR_PASSTHROUGH_MODEL: deepseek/deepseek-v4-flash
+          PRR_PASSTHROUGH_REASONING_EFFORT: high
+          PRR_FALLBACK_MODELS: '["deepseek/deepseek-v4-flash"]'
+          config.response_language: zh-CN
