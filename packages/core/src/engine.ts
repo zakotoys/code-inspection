@@ -1,5 +1,6 @@
 import { formatError } from "./config.js";
 import { InspectionExecutionError } from "./errors.js";
+import { normalizeFindings } from "./findings.js";
 import { createInspectorRegistry, type InspectorRegistry } from "./registry.js";
 import type { Finding, InspectionOutput, InspectionRequest, InspectorContext, Logger } from "./types.js";
 import { noopLogger } from "./types.js";
@@ -29,13 +30,14 @@ export class InspectionEngine {
       ...(request.projectRoot ? { projectRoot: request.projectRoot } : {})
     };
     const output = await resolved.definition.execute(executionContext, request, resolved.config, signal);
-    let findings: Finding[] = output.findings;
+    let findings: Finding[] = normalizeFindings(output.findings);
+    const truncated = findings.length > this.context.config.maxFindings;
     if (findings.length > this.context.config.maxFindings) {
       this.logger.warn("Inspection findings exceeded the configured limit; keeping the first " + this.context.config.maxFindings + ".", { checkId: request.checkId, total: findings.length });
       findings = findings.slice(0, this.context.config.maxFindings);
     }
     const durationMs = Date.now() - startedAt;
-    const summary = summarize(findings, durationMs, output.summary);
+    const summary = summarize(findings, durationMs, { ...output.summary, ...(truncated ? { truncated: true } : {}) });
     this.logger.info("Inspection " + request.checkId + " completed", { durationMs, findings: findings.length });
     return { findings, summary };
   }

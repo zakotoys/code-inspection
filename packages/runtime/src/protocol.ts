@@ -94,7 +94,7 @@ export function parseGetStatusParams(value: unknown): void {
 }
 
 /** The service protocol is intentionally versioned independently from npm packages. */
-export const SERVICE_PROTOCOL_VERSION = 2;
+export const SERVICE_PROTOCOL_VERSION = 3;
 export const SERVICE_IDENTITY = "code-inspection-service/0.2";
 
 export interface ServiceHandshakeParams {

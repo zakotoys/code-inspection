@@ -18,8 +18,10 @@ import {
   relativeWorkspacePath,
   resolveWorkspacePath,
   createInspectorRegistry,
+  normalizeFindings,
   type CheckScope,
   type Finding,
+  type FindingChanges,
   type FindingsPage,
   type InspectionErrorInfo,
   type InspectionRun,
@@ -27,7 +29,8 @@ import {
   type RunSnapshot,
   type WorkspaceConfig
 } from "@zakotoys/code-inspection-core";
-import { statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { Logger } from "@zakotoys/code-inspection-core";
 import type {
@@ -66,6 +69,7 @@ import {
 } from "./protocol.js";
 import { isIgnoredWorkspacePath, watchWorkspace, type WorkspaceWatcher } from "./workspace-watcher.js";
 import { canFallbackToInProcessWorker, runInspectionWorker } from "./worker-executor.js";
+import { FindingBaselines } from "./finding-baselines.js";
 
 interface PreparedRequest {
   checkId: string;
@@ -115,10 +119,12 @@ export class WorkspaceService implements ServiceApi {
   private readonly registry = createInspectorRegistry();
   private readonly runs = new Map<string, InspectionRun>();
   private readonly findings = new Map<string, Finding[]>();
+  private readonly baselines = new FindingBaselines();
+  private readonly changes = new Map<string, FindingChanges>();
   private readonly active = new Map<string, ActiveRun>();
   private readonly latest = new Map<string, string>();
   private readonly dirtyFiles = new Set<string>();
-  private readonly recentSaves = new Map<string, number>();
+  private readonly savedContents = new Map<string, string>();
   private readonly schedulingTails = new Map<string, Promise<void>>();
   private readonly schedulerQueue: ActiveRun[] = [];
   private readonly resourceCounts = new Map<string, number>();
@@ -223,10 +229,13 @@ export class WorkspaceService implements ServiceApi {
       return { run: cloneRun(current.run) };
     }
     if (current && current.run.outcome === "running") {
-      // Manual/CLI requests are idempotent while the same execution key is
-      // already running. Save-triggered requests intentionally supersede the
-      // old run so the newest generation wins.
-      if (joinsPendingRequest || prepared.trigger !== "save") return { run: cloneRun(current.run) };
+      const covered = current.global || (!prepared.global && prepared.files.every((file) => current.files.has(file)));
+      if (covered && (joinsPendingRequest || prepared.trigger !== "save")) return { run: cloneRun(current.run) };
+      prepared = {
+        ...prepared,
+        global: prepared.global || current.global,
+        files: [...new Set([...current.files, ...prepared.files])]
+      };
       current.superseded = true;
       current.run.outcome = "superseded";
       current.run.endedAt = new Date().toISOString();
@@ -360,11 +369,13 @@ export class WorkspaceService implements ServiceApi {
     const request = parseSaveParams(params);
     const file = this.normalizeScopeFiles([request.file])[0];
     if (!file) throw new Error("A saved file is required.");
-    this.recentSaves.set(file, Date.now());
-    while (this.recentSaves.size > 1000) {
-      const oldest = this.recentSaves.keys().next().value as string | undefined;
+    const content = this.fileContentHash(file);
+    if (content === undefined) this.savedContents.delete(file);
+    else this.savedContents.set(file, content);
+    while (this.savedContents.size > 1000) {
+      const oldest = this.savedContents.keys().next().value as string | undefined;
       if (!oldest) break;
-      this.recentSaves.delete(oldest);
+      this.savedContents.delete(oldest);
     }
     this.dirtyFiles.delete(file);
     const config = await this.currentConfig();
@@ -404,7 +415,7 @@ export class WorkspaceService implements ServiceApi {
     const request = parseDeleteParams(params);
     const file = this.normalizeScopeFiles([request.file])[0];
     if (!file) return;
-    this.recentSaves.delete(file);
+    this.savedContents.delete(file);
     this.dirtyFiles.delete(file);
     this.clearFileFindings(file);
     await this.invalidateForFile(file);
@@ -492,6 +503,9 @@ export class WorkspaceService implements ServiceApi {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.baselines.clear();
+    this.changes.clear();
+    this.savedContents.clear();
     this.watcher?.close();
     this.watcher = undefined;
     for (const active of this.active.values()) {
@@ -597,10 +611,20 @@ export class WorkspaceService implements ServiceApi {
         ? await this.executeIsolated(active, request)
         : await active.engine.run(request, active.controller.signal);
       if (active.superseded || active.run.outcome !== "running") return;
+      if (active.run.generation !== this.generationFor(active.executionKey) || this.hasDirtyFiles(active)) {
+        active.run.outcome = "superseded";
+        active.run.endedAt = new Date().toISOString();
+        this.markFindingsStale(active.executionKey);
+        return;
+      }
       active.run.summary = output.summary;
       active.run.outcome = "completed";
       active.run.endedAt = new Date().toISOString();
-      this.replaceFindings(active, output.findings);
+      const findings = this.replaceFindings(active, output.findings);
+      if (!output.summary.truncated) {
+        const files = active.global ? undefined : [...active.files].map((file) => fileUriForPath(resolveWorkspacePath(this.root, file)));
+        this.changes.set(active.run.runId, this.baselines.observe(active.executionKey, JSON.stringify(active.config), files, findings));
+      }
       this.latest.set(active.executionKey, active.run.runId);
     } catch (error) {
       if (active.superseded || active.run.outcome !== "running") return;
@@ -642,19 +666,25 @@ export class WorkspaceService implements ServiceApi {
     }
   }
 
-  private replaceFindings(active: ActiveRun, incoming: Finding[]): void {
+  private hasDirtyFiles(active: ActiveRun): boolean {
+    return [...this.dirtyFiles].some((file) => active.files.has(file)
+      || (active.global && isPathWithin(active.run.projectRoot ?? this.root, resolve(this.root, file))));
+  }
+
+  private replaceFindings(active: ActiveRun, incoming: Finding[]): Finding[] {
     const existing = this.findings.get(active.executionKey) ?? [];
     const retained = active.global
       ? []
       : existing.filter((finding) => !finding.file || !active.files.has(this.relativeFileFromUri(finding.file)));
-    const normalized = incoming.map((finding) => ({
+    const normalized = normalizeFindings(incoming.map((finding) => ({
       ...finding,
       checkId: active.run.checkId,
       ...(active.run.projectRoot ? { projectRoot: active.run.projectRoot } : {}),
       executionKey: active.executionKey,
       ...(active.run.language && !finding.language ? { language: active.run.language } : {})
-    }));
+    })));
     this.findings.set(active.executionKey, [...retained, ...normalized]);
+    return normalized;
   }
 
   private markFileStale(file: string): void {
@@ -664,6 +694,7 @@ export class WorkspaceService implements ServiceApi {
   }
 
   private clearFileFindings(file: string): void {
+    this.baselines.forgetFile(fileUriForPath(resolveWorkspacePath(this.root, file)));
     for (const [key, existing] of this.findings) {
       const retained = existing.filter((finding) => !finding.file || this.relativeFileFromUri(finding.file) !== file);
       if (retained.length === 0) this.findings.delete(key);
@@ -772,18 +803,19 @@ export class WorkspaceService implements ServiceApi {
       }
       catch { exists = false; }
       if (eventType === "rename" && !exists) {
-        this.recentSaves.delete(relativeFile);
+        this.savedContents.delete(relativeFile);
         this.dirtyFiles.delete(relativeFile);
         this.clearFileFindings(relativeFile);
         void this.invalidateForFile(relativeFile).catch((error) => this.logger.debug("Unable to process deleted file", error));
         return;
       }
-      const savedAt = this.recentSaves.get(relativeFile);
-      if (savedAt !== undefined) {
-        if (Date.now() - savedAt < 1500) return;
-        this.recentSaves.delete(relativeFile);
+      const savedContent = this.savedContents.get(relativeFile);
+      if (savedContent !== undefined && this.fileContentHash(relativeFile) === savedContent) return;
+      this.savedContents.delete(relativeFile);
+      if (relativeFile === ".code-inspection.json") {
+        this.baselines.clear();
+        this.markAllFindingsStale();
       }
-      if (relativeFile === ".code-inspection.json") this.markAllFindingsStale();
       else this.markFileStale(relativeFile);
       if (relativeFile === ".code-inspection.json") this.invalidateAllRuns();
       else void this.invalidateForFile(relativeFile).catch((error) => this.logger.debug("Unable to process changed file", error));
@@ -792,6 +824,14 @@ export class WorkspaceService implements ServiceApi {
       onChange: (eventType, relativeFile) => onChange(eventType, relativeFile ?? null),
       onError: (error) => this.logger.debug("Workspace watcher event error", error)
     });
+  }
+
+  private fileContentHash(file: string): string | undefined {
+    try {
+      return createHash("sha256").update(readFileSync(resolveWorkspacePath(this.root, file))).digest("hex");
+    } catch {
+      return undefined;
+    }
   }
 
   private markAllFindingsStale(): void {
@@ -809,6 +849,7 @@ export class WorkspaceService implements ServiceApi {
     return {
       run: cloneRun(run),
       findings: currentFindings,
+      ...(this.changes.has(run.runId) ? { changes: structuredClone(this.changes.get(run.runId)!) } : {}),
       freshness: {
         generation: this.generationFor(key),
         dirtyFiles: [...this.dirtyFiles],
@@ -853,6 +894,7 @@ export class WorkspaceService implements ServiceApi {
       const first = this.runs.keys().next().value as string | undefined;
       if (!first || [...this.active.values()].some((active) => active.run.runId === first)) break;
       this.runs.delete(first);
+      this.changes.delete(first);
     }
   }
 

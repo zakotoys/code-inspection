@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, join } from "node:path";
 import type { FindingSeverity, Position, Range, RawDiagnostic } from "./types.js";
+import { diagnosticKey } from "./findings.js";
 
 export interface ParserContext {
   root: string;
@@ -648,7 +649,7 @@ function stripAnsi(value: string): string {
 function dedupeDiagnostics(values: RawDiagnostic[]): RawDiagnostic[] {
   const seen = new Set<string>();
   return values.filter((value) => {
-    const key = [value.file, value.range?.start.line, value.range?.start.character, value.code, value.message].join("|");
+    const key = diagnosticKey(value);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

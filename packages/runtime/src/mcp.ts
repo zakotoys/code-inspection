@@ -45,6 +45,7 @@ const findingSchema = z.object({
   stale: z.boolean().optional()
 });
 const summarySchema = z.object({
+  truncated: z.boolean().optional(),
   errorCount: z.number().int().min(0),
   warningCount: z.number().int().min(0),
   infoCount: z.number().int().min(0),
@@ -74,6 +75,12 @@ const runSchema = z.object({
 const snapshotSchema = z.object({
   run: runSchema,
   findings: z.array(findingSchema),
+  changes: z.object({
+    baseline: z.boolean(),
+    initializedFiles: z.array(z.string()),
+    added: z.array(findingSchema),
+    resolved: z.array(findingSchema)
+  }).optional(),
   freshness: z.object({ generation: z.number().int(), dirtyFiles: z.array(z.string()), stale: z.boolean() })
 });
 const findingsPageSchema = z.object({
@@ -110,7 +117,7 @@ server.registerTool("run_inspection", {
 
 server.registerTool("get_run", {
   title: "Get Inspection Run",
-  description: "Read the current state, outcome, summary, and freshness metadata for one inspection run.",
+  description: "Read one inspection run and its freshness metadata. Complete, valid results include baseline-aware diagnostic changes. Missing changes are not evidence that problems were resolved.",
   inputSchema: z.object({
     workspace: workspaceSchema,
     run_id: z.string().min(1).describe("Run ID returned by run_inspection."),

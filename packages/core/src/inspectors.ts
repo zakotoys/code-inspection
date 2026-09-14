@@ -9,6 +9,7 @@ import {
   resolveWorkspacePath
 } from "./config.js";
 import { InspectionCancelledError, InspectionExecutionError } from "./errors.js";
+import { createFinding } from "./findings.js";
 import { isExcludedPath } from "./matching.js";
 import { getDiagnosticParser } from "./parsers.js";
 import { disambiguateHeaderLanguage } from "./projects.js";
@@ -49,7 +50,7 @@ export async function runEslint(context: InspectorExecutionContext, request: Ins
     throwIfAborted(signal);
     const findings = results.flatMap((result) => {
       if (isExcludedPath(context.root, result.filePath, config.exclude)) return [];
-      return result.messages.map((message, index) => {
+      return result.messages.map((message) => {
       const file = result.filePath ? resolveFindingFile(context.root, cwd, result.filePath, context.logger) : undefined;
       const range = eslintRange(message);
       return makeFinding(context, request, config, {
@@ -58,7 +59,7 @@ export async function runEslint(context: InspectorExecutionContext, request: Ins
         code: message.ruleId ?? undefined,
         file,
         range
-      }, index, "eslint");
+      }, "eslint");
       });
     });
     return output(findings);
@@ -87,7 +88,7 @@ export async function runTypeScript(context: InspectorExecutionContext, request:
   try {
     const readConfig = ts.readConfigFile(projectPath, ts.sys.readFile);
     if (readConfig.error) {
-      const finding = mapTypeScriptDiagnostic(context, request, config, readConfig.error, 0);
+      const finding = mapTypeScriptDiagnostic(context, request, config, readConfig.error);
       return output([finding]);
     }
     const parsed = ts.parseJsonConfigFileContent(readConfig.config, ts.sys, dirname(projectPath));
@@ -99,7 +100,7 @@ export async function runTypeScript(context: InspectorExecutionContext, request:
     const diagnostics = [...(parsed.errors ?? []), ...ts.getPreEmitDiagnostics(program)]
       .filter((diagnostic) => !diagnostic.file?.fileName || !isExcludedPath(context.root, diagnostic.file.fileName, config.exclude));
     throwIfAborted(signal);
-    return output(diagnostics.map((diagnostic, index) => mapTypeScriptDiagnostic(context, request, config, diagnostic, index)));
+    return output(diagnostics.map((diagnostic) => mapTypeScriptDiagnostic(context, request, config, diagnostic)));
   } catch (error) {
     if (error instanceof InspectionExecutionError) throw error;
     throw new InspectionExecutionError("inspector-failed", "TypeScript inspection failed: " + formatError(error), undefined, { cause: error });
@@ -335,10 +336,10 @@ async function runExternal(context: InspectorExecutionContext, request: Inspecti
   } catch (error) {
     throw new InspectionExecutionError("parse-failed", "Unable to parse " + context.checkId + " output: " + formatError(error), undefined, { cause: error });
   }
-  let findings = raw.flatMap((diagnostic, index) => {
+  let findings = raw.flatMap((diagnostic) => {
     if (diagnostic.file && isExcludedDiagnostic(context.root, cwd, diagnostic.file, config.exclude)) return [];
     if (diagnostic.file && !canResolveFindingFile(context.root, cwd, diagnostic.file)) return [];
-    return [makeFinding(context, request, config, diagnostic, index, context.checkId, cwd)];
+    return [makeFinding(context, request, config, diagnostic, context.checkId, cwd)];
   });
   const outputText = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
   const exitCode = result.exitCode;
@@ -352,7 +353,7 @@ async function runExternal(context: InspectorExecutionContext, request: Inspecti
   return output(findings, { exitCode: exitCode === null ? undefined : exitCode, stdout: result.stdout, stderr: result.stderr, ...(toolVersion ? { toolVersion } : {}) });
 }
 
-function mapTypeScriptDiagnostic(context: InspectorExecutionContext, request: InspectionRequest, config: CheckConfig, diagnostic: TypeScriptDiagnostic, index: number): Finding {
+function mapTypeScriptDiagnostic(context: InspectorExecutionContext, request: InspectionRequest, config: CheckConfig, diagnostic: TypeScriptDiagnostic): Finding {
   const message = flattenTypeScriptMessage(diagnostic.messageText);
   const file = diagnostic.file?.fileName ? resolveFindingFile(context.root, resolveCwd(context, config, request.projectRoot), diagnostic.file.fileName, context.logger) : undefined;
   const range = diagnostic.file && typeof diagnostic.start === "number" ? typeScriptRange(diagnostic.file, diagnostic.start, diagnostic.length ?? 0) : undefined;
@@ -362,21 +363,18 @@ function mapTypeScriptDiagnostic(context: InspectorExecutionContext, request: In
     code: diagnostic.code === undefined ? undefined : String(diagnostic.code),
     file,
     range
-  }, index, "typescript");
+  }, "typescript");
 }
 
-function makeFinding(context: InspectorExecutionContext, request: InspectionRequest, config: CheckConfig, diagnostic: RawDiagnostic, index: number, source: string, baseDirectory = context.root): Finding {
+function makeFinding(context: InspectorExecutionContext, request: InspectionRequest, config: CheckConfig, diagnostic: RawDiagnostic, source: string, baseDirectory = context.root): Finding {
   const file = diagnostic.file ? (diagnostic.file.startsWith("file://") || isAbsolute(diagnostic.file) ? resolveFindingFile(context.root, baseDirectory, diagnostic.file, context.logger) : resolveFindingFile(context.root, baseDirectory, diagnostic.file, context.logger)) : undefined;
   const language = request.language ?? (file ? inferLanguageFromUri(context.root, file, config.languages) : config.languages[0]);
-  const location = diagnostic.range ? diagnostic.range.start.line + ":" + diagnostic.range.start.character : "none";
-  const id = [request.checkId, request.generation, index, file ?? "workspace", diagnostic.code ?? "", location, diagnostic.message].join(":");
   const relatedInformation = diagnostic.relatedInformation?.map((related) => ({
     message: related.message,
     ...(related.file ? { file: resolveFindingFile(context.root, baseDirectory, related.file, context.logger) } : {}),
     ...(related.range ? { range: related.range } : {})
   }));
-  return {
-    id,
+  return createFinding({
     checkId: request.checkId,
     source,
     ...(language ? { language } : {}),
@@ -390,11 +388,11 @@ function makeFinding(context: InspectorExecutionContext, request: InspectionRequ
     ...(relatedInformation && relatedInformation.length > 0 ? { relatedInformation } : {}),
     runId: request.runId,
     generation: request.generation
-  };
+  });
 }
 
 function workspaceFinding(context: InspectorExecutionContext, request: InspectionRequest, config: CheckConfig, code: string, message: string): Finding {
-  return makeFinding(context, request, config, { message, severity: "error", code }, 0, context.checkId);
+  return makeFinding(context, request, config, { message, severity: "error", code }, context.checkId);
 }
 
 function output(findings: Finding[], extra: Partial<InspectionOutput["summary"]> = {}): InspectionOutput {
