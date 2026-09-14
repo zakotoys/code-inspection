@@ -614,7 +614,7 @@ export class WorkspaceService implements ServiceApi {
       if (active.run.generation !== this.generationFor(active.executionKey) || this.hasDirtyFiles(active)) {
         active.run.outcome = "superseded";
         active.run.endedAt = new Date().toISOString();
-        this.markFindingsStale(active.executionKey);
+        this.markFindingsStale(active.executionKey, active.global ? undefined : active.files);
         return;
       }
       active.run.summary = output.summary;
@@ -633,7 +633,7 @@ export class WorkspaceService implements ServiceApi {
       else {
         active.run.outcome = "failed";
         active.run.error = errorInfo(error);
-        this.markFindingsStale(active.executionKey);
+        this.markFindingsStale(active.executionKey, active.global ? undefined : active.files);
       }
       // The latest attempt is useful even when it did not produce a fresh
       // result; clients need its error/cancellation outcome to explain stale
@@ -745,7 +745,10 @@ export class WorkspaceService implements ServiceApi {
     for (const key of keys) {
       this.bumpGeneration(key);
       this.invalidateKey(key);
-      this.markFindingsStale(key);
+      // File-scoped findings were already invalidated by markFileStale (or
+      // removed by clearFileFindings). Project and workspace checks can depend
+      // on other files, so their complete result set is no longer trustworthy.
+      if (!key.endsWith("|file")) this.markFindingsStale(key);
     }
   }
 
@@ -838,9 +841,12 @@ export class WorkspaceService implements ServiceApi {
     for (const [key, existing] of this.findings) this.findings.set(key, existing.map((finding) => ({ ...finding, stale: true })));
   }
 
-  private markFindingsStale(executionKey: string): void {
+  private markFindingsStale(executionKey: string, files?: ReadonlySet<string>): void {
     const existing = this.findings.get(executionKey) ?? [];
-    this.findings.set(executionKey, existing.map((finding) => ({ ...finding, stale: true })));
+    this.findings.set(executionKey, existing.map((finding) => {
+      if (files && (!finding.file || !files.has(this.relativeFileFromUri(finding.file)))) return finding;
+      return { ...finding, stale: true };
+    }));
   }
 
   private snapshot(run: InspectionRun): RunSnapshot {
@@ -917,7 +923,7 @@ export class WorkspaceService implements ServiceApi {
     active.run.error = errorInfo(error);
     this.latest.set(active.executionKey, active.run.runId);
     this.active.delete(active.executionKey);
-    this.markFindingsStale(active.executionKey);
+    this.markFindingsStale(active.executionKey, active.global ? undefined : active.files);
     this.trimRuns();
   }
 

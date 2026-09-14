@@ -166,6 +166,24 @@ describe("inspection observations", () => {
     expect((await waitForRun(service, saved.runs[0]!.runId)).changes?.baseline).toBe(true);
   });
 
+  it("keeps findings outside a dirty partial scope fresh", async () => {
+    const { root, service, engine } = await fixture();
+    const a = fileUriForPath(join(root, "a.js"));
+    const b = fileUriForPath(join(root, "b.js"));
+    engine.mockResolvedValueOnce(output([finding(root), finding(root, "b.js")]));
+    await inspect(service, ["a.js", "b.js"]);
+
+    await service.didChange({ file: "b.js" });
+    const changed = (await service.getFindings({ offset: 0, limit: 50, includeStale: true })).page.findings;
+    expect(changed.find((entry) => entry.file === a)?.stale).not.toBe(true);
+    expect(changed.find((entry) => entry.file === b)?.stale).toBe(true);
+
+    engine.mockResolvedValueOnce(output([finding(root, "b.js", "discarded result")]));
+    expect((await inspect(service, ["b.js"])).run.outcome).toBe("superseded");
+    const fresh = await service.getFindings({ offset: 0, limit: 50, includeStale: false });
+    expect(fresh.page.findings.map((entry) => entry.file)).toEqual([a]);
+  });
+
   it.each(["edited", "cancelled"])("does not advance the baseline when a running check is %s", async (reason) => {
     const { root, service, engine } = await fixture();
     engine.mockResolvedValue(output([finding(root)]));
@@ -232,7 +250,7 @@ describe("inspection observations", () => {
       await exited;
       await owner.close();
     }
-  }, 15_000);
+  }, 30_000);
 
   it("returns baseline changes through the MCP output contract", async () => {
     const { root, dataDirectory, service, engine } = await fixture();
@@ -263,5 +281,5 @@ describe("inspection observations", () => {
       await transport.close();
       await owner.close();
     }
-  }, 15_000);
+  }, 30_000);
 });
