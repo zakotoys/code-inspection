@@ -47,7 +47,7 @@ jobs:
           java-version: "21"
       - uses: stCarolas/setup-maven@v5
         with:
-          maven-version: "3.9.9"
+          maven-version: "3.9.16"
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.10.2"
