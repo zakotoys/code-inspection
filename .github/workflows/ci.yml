@@ -50,7 +50,7 @@ jobs:
           maven-version: "3.9.9"
       - uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "8.14.5"
       - uses: actions/setup-go@v7
         with:
           go-version: "1.27.1"
