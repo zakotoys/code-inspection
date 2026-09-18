@@ -73,7 +73,7 @@ jobs:
         if: matrix.group == 'general'
         with:
           go-version: "1.27.1"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         if: matrix.group == 'general'
         id: golangci-lint
         with:
