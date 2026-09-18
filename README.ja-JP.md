@@ -233,7 +233,7 @@ VS Code / Zed --> LSP -----+    共有スケジューリングとメモリ内の
 | [extensions/zed](extensions/zed) | Rust/WASM ランチャーと manifest。 |
 | [tests/fixtures](tests/fixtures) | 対応する各言語の正常/エラー fixture とツール出力。 |
 | [scripts](scripts) | パッケージ処理とプロセスレベルのスモーク検査。 |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Windows/macOS/Linux での Node 24 検査、バージョン固定済み Ubuntu 言語ツールマトリクス、エディターのパッケージ処理。 |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Windows/macOS/Linux での Node 24 検査、並列実行する Ubuntu 言語ツールグループ、エディターのパッケージ処理。 |
 | [.github/workflows/release.yml](.github/workflows/release.yml) | tag を契機とする npm 公開と GitHub Release 作成。 |
 
 ```sh
@@ -247,7 +247,7 @@ npm run package:runtime
 npm run smoke:package
 ```
 
-`check` は npm workspace をビルドしてテストを実行します。`smoke:languages` は対応するすべての言語で正常/エラーの CLI 検査を実行し、外部ツールマトリクスを検証します。CI で `STRICT_LANGUAGE_SMOKE=1` と `LANGUAGE_SMOKE_PROTOCOLS=1` を設定すると、すべてのツールと MCP/LSP フローが必須になります。プロトコルのスモーク検査では実際の子プロセスを使用します。パッケージのスモーク検査では、ローカル tarball を一時 consumer にインストールし、信頼、共有検出結果、空白を含むパス、アイドルシャットダウンを検証します。
+`check` は npm workspace をビルドしてテストを実行します。`smoke:languages` は対応するすべての言語で正常/エラーの CLI 検査を実行し、外部ツールマトリクスを検証します。CI では `node scripts/smoke-languages.mjs` に `general`、`java`、`clang` の引数を指定して並列実行します。CI で `STRICT_LANGUAGE_SMOKE=1` と `LANGUAGE_SMOKE_PROTOCOLS=1` を設定すると、すべてのツールと MCP/LSP フローが必須になります。プロトコルのスモーク検査では実際の子プロセスを使用します。パッケージのスモーク検査では、ローカル tarball を一時 consumer にインストールし、信頼、共有検出結果、空白を含むパス、アイドルシャットダウンを検証します。
 
 すべての配布成果物をビルドするには、次を実行します。
 

@@ -238,13 +238,14 @@ describe("inspection observations", () => {
       } else {
         await connection.sendNotification("workspace/didDeleteFiles", { files: [{ uri }] });
       }
-      await vi.waitFor(async () => expect((await service.getRun({ runId })).snapshot.run.outcome).toBe("superseded"), { timeout: 1500, interval: 10 });
-      releaseChecks[0]!();
+      await vi.waitFor(async () => expect((await service.getRun({ runId })).snapshot.run.outcome).toBe("superseded"), { timeout: 5000, interval: 10 });
+      releaseChecks.shift()!();
       await vi.waitFor(async () => expect((await service.getStatus()).runningCount).toBe(0));
       expect((await service.getFindings({ offset: 0, limit: 50, includeStale: false })).page.findings).toEqual([]);
       await connection.sendRequest("shutdown");
       await connection.sendNotification("exit");
     } finally {
+      for (const release of releaseChecks.splice(0)) release();
       connection.dispose();
       child.kill();
       await exited;

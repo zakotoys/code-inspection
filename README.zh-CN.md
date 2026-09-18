@@ -233,7 +233,7 @@ VS Code / Zed --> LSP -----+    共享调度和内存检查结果
 | [extensions/zed](extensions/zed) | Rust/WASM 启动器和 manifest。 |
 | [tests/fixtures](tests/fixtures) | 每种支持语言的正常/错误 fixture 和工具输出。 |
 | [scripts](scripts) | 打包和进程级冒烟检查。 |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | 在 Windows/macOS/Linux 上执行 Node 24 检查，并运行固定版本的 Ubuntu 语言工具矩阵和编辑器打包。 |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | 在 Windows/macOS/Linux 上执行 Node 24 检查，并行运行 Ubuntu 语言工具分组和编辑器打包。 |
 | [.github/workflows/release.yml](.github/workflows/release.yml) | 由 tag 触发的 npm 发布与 GitHub Release 创建。 |
 
 ```sh
@@ -247,7 +247,7 @@ npm run package:runtime
 npm run smoke:package
 ```
 
-`check` 会构建 npm workspace 并运行测试。`smoke:languages` 会对所有支持语言运行正常/错误 CLI 检查，并探测外部工具矩阵；在 CI 中设置 `STRICT_LANGUAGE_SMOKE=1` 和 `LANGUAGE_SMOKE_PROTOCOLS=1`，会要求所有工具及 MCP/LSP 流程全部通过。协议冒烟检查使用真实子进程。软件包冒烟检查会将本地 tarball 安装到临时 consumer 中，并检查信任、共享检查结果、含空格路径和空闲关闭行为。
+`check` 会构建 npm workspace 并运行测试。`smoke:languages` 会对所有支持语言运行正常/错误 CLI 检查，并探测外部工具矩阵；CI 使用 `general`、`java`、`clang` 参数并行运行 `node scripts/smoke-languages.mjs`。在 CI 中设置 `STRICT_LANGUAGE_SMOKE=1` 和 `LANGUAGE_SMOKE_PROTOCOLS=1`，会要求所有工具及 MCP/LSP 流程全部通过。协议冒烟检查使用真实子进程。软件包冒烟检查会将本地 tarball 安装到临时 consumer 中，并检查信任、共享检查结果、含空格路径和空闲关闭行为。
 
 构建全部分发产物：
 

@@ -233,7 +233,7 @@ VS Code / Zed --> LSP -----+    shared scheduling and in-memory findings
 | [extensions/zed](extensions/zed) | Rust/WASM launcher and manifest. |
 | [tests/fixtures](tests/fixtures) | Clean/broken fixtures for every supported language and tool output. |
 | [scripts](scripts) | Packaging and process-level smoke checks. |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Node 24 checks on Windows/macOS/Linux plus a pinned Ubuntu language-tool matrix and editor packaging. |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Node 24 checks on Windows/macOS/Linux, parallel Ubuntu language-tool groups, and editor packaging. |
 | [.github/workflows/release.yml](.github/workflows/release.yml) | Tag-triggered npm publication and GitHub Release creation. |
 
 ```sh
@@ -247,7 +247,7 @@ npm run package:runtime
 npm run smoke:package
 ```
 
-`check` builds npm workspaces and runs tests. `smoke:languages` runs clean/broken CLI checks for all supported languages and probes the external tool matrix; set `STRICT_LANGUAGE_SMOKE=1` and `LANGUAGE_SMOKE_PROTOCOLS=1` in CI to require every tool plus MCP/LSP flows. Protocol smoke checks use real child processes. Package smoke installs local tarballs into a temporary consumer and checks trust, shared findings, paths with spaces, and idle shutdown.
+`check` builds npm workspaces and runs tests. `smoke:languages` runs clean/broken CLI checks for all supported languages and probes the external tool matrix; CI runs `node scripts/smoke-languages.mjs` with `general`, `java`, and `clang` groups in parallel. Set `STRICT_LANGUAGE_SMOKE=1` and `LANGUAGE_SMOKE_PROTOCOLS=1` in CI to require every tool plus MCP/LSP flows. Protocol smoke checks use real child processes. Package smoke installs local tarballs into a temporary consumer and checks trust, shared findings, paths with spaces, and idle shutdown.
 
 For all distribution artifacts:
 

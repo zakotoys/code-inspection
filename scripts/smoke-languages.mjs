@@ -9,23 +9,30 @@ const repositoryRoot = resolve(".");
 const runtimeEntry = resolve(process.env.CODE_INSPECTION_RUNTIME_ENTRY ?? "packages/runtime/dist/cli.js");
 const strict = process.env.STRICT_LANGUAGE_SMOKE === "1";
 const protocols = process.env.LANGUAGE_SMOKE_PROTOCOLS === "1";
+const group = process.argv[2];
 const smokeState = await mkdtemp(join(tmpdir(), "code-inspection-language-smoke-"));
 
+const toolProbes = {
+  general: [["ruff", ["--version"]], ["pyright", ["--version"]], ["go", ["version"]], ["golangci-lint", ["version"]], ["cargo", ["--version"]]],
+  java: [["javac", ["-version"]], ["mvn", ["--version"]], ["gradle", ["--version"]]],
+  clang: [["clang", ["--version"]], ["clang-tidy", ["--version"]]]
+};
+
 const fixtures = [
-  { smokeKey: "javascript", language: "javascript", clean: "eslint-clean", broken: "eslint-broken", check: "eslint", file: "broken.js" },
-  { smokeKey: "typescript", language: "typescript", clean: "typescript-clean", broken: "typescript-broken", check: "typescript", file: "broken.ts" },
-  { smokeKey: "python-ruff", language: "python", clean: "python-clean", broken: "python-broken", check: "ruff", file: "broken.py" },
-  { smokeKey: "python-pyright", language: "python", clean: "python-pyright-clean", broken: "python-pyright-broken", check: "pyright", file: "broken.py" },
-  { smokeKey: "go-vet", language: "go", clean: "go-clean", broken: "go-broken", check: "go-vet", file: "main.go" },
-  { smokeKey: "go-lint", language: "go", clean: "go-lint-clean", broken: "go-lint-broken", check: "golangci-lint", file: "main.go" },
-  { smokeKey: "rust", language: "rust", clean: "rust-clean", broken: "rust-broken", check: "cargo-check", file: "src/lib.rs" },
-  { smokeKey: "java-build", language: "java", clean: "java-clean", broken: "java-broken", check: "java-build", file: "src/Broken.java" },
-  { smokeKey: "java-checkstyle", language: "java", clean: "java-maven-checkstyle-clean", broken: "java-maven-checkstyle-broken", check: "checkstyle", file: "src/main/java/Main.java" },
-  { smokeKey: "java-pmd", language: "java", clean: "java-gradle-pmd-clean", broken: "java-gradle-pmd-broken", check: "pmd", file: "src/main/java/Main.java" },
-  { smokeKey: "c", language: "c", clean: "c-clean", broken: "c-broken", check: "clang-build", file: "main.c" },
-  { smokeKey: "cpp", language: "cpp", clean: "cpp-clean", broken: "cpp-broken", check: "clang-build", file: "main.cpp" },
-  { smokeKey: "c-clang-tidy", language: "c", clean: "c-clang-tidy-clean", broken: "c-clang-tidy-broken", check: "clang-tidy", file: "main.c" },
-  { smokeKey: "cpp-clang-tidy", language: "cpp", clean: "cpp-clang-tidy-clean", broken: "cpp-clang-tidy-broken", check: "clang-tidy", file: "main.cpp" }
+  { group: "general", smokeKey: "javascript", language: "javascript", clean: "eslint-clean", broken: "eslint-broken", check: "eslint", file: "broken.js" },
+  { group: "general", smokeKey: "typescript", language: "typescript", clean: "typescript-clean", broken: "typescript-broken", check: "typescript", file: "broken.ts" },
+  { group: "general", smokeKey: "python-ruff", language: "python", clean: "python-clean", broken: "python-broken", check: "ruff", file: "broken.py" },
+  { group: "general", smokeKey: "python-pyright", language: "python", clean: "python-pyright-clean", broken: "python-pyright-broken", check: "pyright", file: "broken.py" },
+  { group: "general", smokeKey: "go-vet", language: "go", clean: "go-clean", broken: "go-broken", check: "go-vet", file: "main.go" },
+  { group: "general", smokeKey: "go-lint", language: "go", clean: "go-lint-clean", broken: "go-lint-broken", check: "golangci-lint", file: "main.go" },
+  { group: "general", smokeKey: "rust", language: "rust", clean: "rust-clean", broken: "rust-broken", check: "cargo-check", file: "src/lib.rs" },
+  { group: "java", smokeKey: "java-build", language: "java", clean: "java-clean", broken: "java-broken", check: "java-build", file: "src/Broken.java" },
+  { group: "java", smokeKey: "java-checkstyle", language: "java", clean: "java-maven-checkstyle-clean", broken: "java-maven-checkstyle-broken", check: "checkstyle", file: "src/main/java/Main.java" },
+  { group: "java", smokeKey: "java-pmd", language: "java", clean: "java-gradle-pmd-clean", broken: "java-gradle-pmd-broken", check: "pmd", file: "src/main/java/Main.java" },
+  { group: "clang", smokeKey: "c", language: "c", clean: "c-clean", broken: "c-broken", check: "clang-build", file: "main.c" },
+  { group: "clang", smokeKey: "cpp", language: "cpp", clean: "cpp-clean", broken: "cpp-broken", check: "clang-build", file: "main.cpp" },
+  { group: "clang", smokeKey: "c-clang-tidy", language: "c", clean: "c-clang-tidy-clean", broken: "c-clang-tidy-broken", check: "clang-tidy", file: "main.c" },
+  { group: "clang", smokeKey: "cpp-clang-tidy", language: "cpp", clean: "cpp-clang-tidy-clean", broken: "cpp-clang-tidy-broken", check: "clang-tidy", file: "main.cpp" }
 ];
 
 function assert(condition, message) {
@@ -100,8 +107,11 @@ async function probe(command, args = ["--version"]) {
 }
 
 try {
+  assert(!group || Object.hasOwn(toolProbes, group), `Unknown language smoke group: ${group}`);
+  assert(fixtures.every((item) => Object.hasOwn(toolProbes, item.group)), "Every language smoke fixture must belong to a CI group.");
   assert(existsSync(runtimeEntry), `Runtime CLI is missing: ${runtimeEntry}. Run npm run build first.`);
   for (const item of fixtures) {
+    if (group && item.group !== group) continue;
     const cleanPath = resolve("tests/fixtures", item.clean);
     const brokenPath = resolve("tests/fixtures", item.broken);
     if (!existsSync(cleanPath) || !existsSync(brokenPath)) {
@@ -143,7 +153,7 @@ try {
       assert(lsp.code === 0, `${item.language} LSP smoke failed: ${lsp.stderr || lsp.stdout}`);
     }
   }
-  for (const [tool, args] of [["ruff", ["--version"]], ["pyright", ["--version"]], ["go", ["version"]], ["golangci-lint", ["version"]], ["cargo", ["--version"]], ["javac", ["-version"]], ["mvn", ["--version"]], ["gradle", ["--version"]], ["clang", ["--version"]], ["clang-tidy", ["--version"]]]) await probe(tool, args);
+  for (const [tool, args] of group ? toolProbes[group] : Object.values(toolProbes).flat()) await probe(tool, args);
   process.stdout.write(`Language smoke passed${strict ? " (strict)" : ""}.\n`);
 } finally {
   await rm(smokeState, { recursive: true, force: true });
