@@ -88,7 +88,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         if: matrix.group == 'general'
         with:
-          toolchain: "1.85.0"
+          toolchain: "1.98.1"
       - name: Use runner Clang 18
         if: matrix.group == 'clang'
         run: |
