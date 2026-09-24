@@ -68,7 +68,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         if: matrix.group == 'java'
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "9.8.0"
       - uses: actions/setup-go@v7
         if: matrix.group == 'general'
         with:
