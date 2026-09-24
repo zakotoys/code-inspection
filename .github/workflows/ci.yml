@@ -64,7 +64,7 @@ jobs:
       - uses: stCarolas/setup-maven@v5
         if: matrix.group == 'java'
         with:
-          maven-version: "3.9.9"
+          maven-version: "3.9.16"
       - uses: gradle/actions/setup-gradle@v6
         if: matrix.group == 'java'
         with:
